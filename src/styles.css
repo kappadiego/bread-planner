@@ -28,3 +28,43 @@ button,
 input {
   font: inherit;
 }
+
+.timeline-primary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  background: #b45309;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: white;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.timeline-primary:hover {
+  background: #92400e;
+}
+
+.timeline-secondary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid #d6d3d1;
+  border-radius: 0.5rem;
+  background: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #44403c;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.timeline-secondary:hover {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
