@@ -12,6 +12,7 @@ import {
 import type { ComponentType, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { calculateBread, type BreadInputs, type CalculatorMode, roundGram } from './calculations';
+import { TimelinePlanner } from './components/TimelinePlanner';
 
 type IconProps = {
   size?: number;
@@ -127,6 +128,8 @@ function App() {
             )}
           </div>
         </section>
+
+        <TimelinePlanner />
 
         <QuickGuidelines />
 
