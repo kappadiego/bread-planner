@@ -2,6 +2,7 @@ import {
   Bookmark,
   CalendarDays,
   CircleHelp,
+  CirclePlus,
   Clock3,
   Droplets,
   RotateCcw,
@@ -13,6 +14,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { calculateBread, type BreadInputs, type CalculatorMode, roundGram } from './calculations';
 import { TimelinePlanner } from './components/TimelinePlanner';
+import { doughProfiles, type DoughProfile } from './doughProfiles';
 
 type IconProps = {
   size?: number;
@@ -23,13 +25,7 @@ type IconProps = {
 
 type IconComponent = ComponentType<IconProps>;
 
-type Preset = {
-  id: string;
-  label: string;
-  description: string;
-  icon: IconComponent;
-  values: Pick<BreadInputs, 'hydration' | 'saltPercentage' | 'starterPercentage' | 'starterHydration'>;
-};
+type ActiveProfileId = DoughProfile['id'] | 'custom';
 
 type FieldConfig = {
   field: keyof BreadInputs;
@@ -40,30 +36,6 @@ type FieldConfig = {
   icon: IconComponent;
 };
 
-const presets: Preset[] = [
-  {
-    id: 'base',
-    label: 'Pane base',
-    description: 'Equilibrato',
-    icon: BreadIcon,
-    values: { hydration: 65, saltPercentage: 2, starterPercentage: 20, starterHydration: 100 },
-  },
-  {
-    id: 'high',
-    label: 'Alta idratazione',
-    description: 'Mollica aperta',
-    icon: Droplets,
-    values: { hydration: 80, saltPercentage: 2, starterPercentage: 20, starterHydration: 100 },
-  },
-  {
-    id: 'focaccia',
-    label: 'Focaccia',
-    description: 'Soffice',
-    icon: FocacciaIcon,
-    values: { hydration: 75, saltPercentage: 2.2, starterPercentage: 15, starterHydration: 100 },
-  },
-];
-
 const initialInputs: BreadInputs = {
   mode: 'flour',
   flourTotal: 1000,
@@ -72,29 +44,47 @@ const initialInputs: BreadInputs = {
   saltPercentage: 2,
   starterPercentage: 20,
   starterHydration: 100,
+  oilPercentage: 0,
 };
 
 function App() {
   const [inputs, setInputs] = useState<BreadInputs>(initialInputs);
-  const [activePreset, setActivePreset] = useState('base');
+  const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>('base');
+  const [customProfileName, setCustomProfileName] = useState('Custom');
 
   const results = useMemo(() => calculateBread(inputs), [inputs]);
 
   const updateInput = (field: keyof BreadInputs, value: number | CalculatorMode) => {
     setInputs((current) => ({ ...current, [field]: value }));
-    if (field !== 'mode') {
-      setActivePreset('custom');
-    }
+    setActiveProfileId('custom');
   };
 
   const reset = () => {
     setInputs(initialInputs);
-    setActivePreset('base');
+    setActiveProfileId('base');
+    setCustomProfileName('Custom');
   };
 
-  const applyPreset = (preset: Preset) => {
-    setActivePreset(preset.id);
-    setInputs((current) => ({ ...current, ...preset.values }));
+  const applyProfile = (profile: DoughProfile) => {
+    setActiveProfileId(profile.id);
+    setCustomProfileName('Custom');
+    setInputs((current) => ({ ...current, ...profile.values }));
+  };
+
+  const selectCustomProfile = () => {
+    setActiveProfileId('custom');
+  };
+
+  const customDisplayName = customProfileName.trim() || 'Custom';
+
+  const getProfileIcon = (profileId: DoughProfile['id']): IconComponent => {
+    if (profileId === 'high') {
+      return Droplets;
+    }
+    if (profileId === 'focaccia') {
+      return FocacciaIcon;
+    }
+    return BreadIcon;
   };
 
   return (
@@ -105,13 +95,20 @@ function App() {
         <section className="grid gap-7 xl:grid-cols-[minmax(560px,0.98fr)_minmax(520px,0.92fr)] xl:items-start">
           <div className="rounded-[14px] border border-stone-200 bg-white/82 p-4 shadow-air backdrop-blur sm:p-5">
             <div className="rounded-[12px] border border-stone-200 bg-white p-4 shadow-inner-soft">
-              <ModeTabs mode={inputs.mode} onChange={(mode) => updateInput('mode', mode)} />
-
-              <PresetSelector
-                activePreset={activePreset}
-                presets={presets}
-                onSelect={applyPreset}
+              <DoughProfileSelector
+                activeProfileId={activeProfileId}
+                customDisplayName={customDisplayName}
+                customProfileName={customProfileName}
+                profiles={doughProfiles}
+                getProfileIcon={getProfileIcon}
+                onSelectProfile={applyProfile}
+                onSelectCustom={selectCustomProfile}
+                onCustomProfileNameChange={setCustomProfileName}
               />
+
+              <div className="mt-6">
+                <ModeTabs mode={inputs.mode} onChange={(mode) => updateInput('mode', mode)} />
+              </div>
 
               <CalculatorForm inputs={inputs} onChange={updateInput} />
 
@@ -122,7 +119,7 @@ function App() {
             <ResultCards results={results} />
             {results.hasNegativeAdditions && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                Controlla le percentuali: lo starter contiene piu farina o acqua di quanta ne richieda
+                Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
                 la formula.
               </div>
             )}
@@ -134,7 +131,7 @@ function App() {
         <QuickGuidelines />
 
         <p className="text-center text-sm text-stone-500">
-          Le quantita sono calcolate con arrotondamento al grammo.
+          Le quantità sono calcolate con arrotondamento al grammo.
         </p>
       </div>
     </main>
@@ -219,36 +216,94 @@ function ModeTabs({
   );
 }
 
-function PresetSelector({
-  activePreset,
-  presets,
-  onSelect,
+function DoughProfileSelector({
+  activeProfileId,
+  customDisplayName,
+  customProfileName,
+  profiles,
+  getProfileIcon,
+  onSelectProfile,
+  onSelectCustom,
+  onCustomProfileNameChange,
 }: {
-  activePreset: string;
-  presets: Preset[];
-  onSelect: (preset: Preset) => void;
+  activeProfileId: ActiveProfileId;
+  customDisplayName: string;
+  customProfileName: string;
+  profiles: DoughProfile[];
+  getProfileIcon: (profileId: DoughProfile['id']) => IconComponent;
+  onSelectProfile: (profile: DoughProfile) => void;
+  onSelectCustom: () => void;
+  onCustomProfileNameChange: (value: string) => void;
 }) {
   return (
-    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-      {presets.map((preset) => {
-        const Icon = preset.icon;
-        return (
-          <button
-            key={preset.id}
-            type="button"
-            onClick={() => onSelect(preset)}
-            className={`flex min-h-[52px] items-center justify-center gap-3 rounded-lg border px-3 text-base font-semibold transition ${
-              activePreset === preset.id
-                ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-sm'
-                : 'border-stone-300 bg-white text-stone-600 hover:border-amber-300 hover:bg-amber-50/40'
-            }`}
-          >
-            <Icon size={24} strokeWidth={1.8} aria-hidden="true" />
-            <span>{preset.label}</span>
-          </button>
-        );
-      })}
-    </div>
+    <section className="mt-5">
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold text-ink">Scegli il tipo di impasto</h2>
+        <p className="mt-1 text-sm leading-5 text-stone-600">
+          Parti da un profilo base o crea una formula personalizzata.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {profiles.map((profile) => {
+          const Icon = getProfileIcon(profile.id);
+          return (
+            <button
+              key={profile.id}
+              type="button"
+              onClick={() => onSelectProfile(profile)}
+              className={`flex min-h-[94px] items-start gap-3 rounded-lg border p-4 text-left transition ${
+                activeProfileId === profile.id
+                  ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-sm'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-amber-300 hover:bg-amber-50/40'
+              }`}
+            >
+              <Icon size={25} strokeWidth={1.8} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                <span className="block text-base font-semibold">{profile.label}</span>
+                <span className="mt-1 block text-sm leading-5 text-stone-500">{profile.description}</span>
+              </span>
+            </button>
+          );
+        })}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onSelectCustom}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onSelectCustom();
+            }
+          }}
+          className={`flex min-h-[94px] cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
+            activeProfileId === 'custom'
+              ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-sm'
+              : 'border-stone-300 bg-white text-stone-600 hover:border-amber-300 hover:bg-amber-50/40'
+          }`}
+        >
+          <CirclePlus size={25} strokeWidth={1.8} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {activeProfileId === 'custom' ? (
+              <input
+                type="text"
+                aria-label="Nome profilo custom"
+                value={customProfileName}
+                placeholder="Custom"
+                onClick={(event) => event.stopPropagation()}
+                onFocus={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                onChange={(event) => onCustomProfileNameChange(event.currentTarget.value)}
+                className="min-h-9 w-full min-w-0 rounded-lg border border-amber-200 bg-white px-3 text-base font-semibold text-ink outline-none transition placeholder:text-stone-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+              />
+            ) : (
+              <span className="block text-base font-semibold">{customDisplayName}</span>
+            )}
+            <span className="mt-1 block text-sm leading-5 text-stone-500">Crea il tuo profilo.</span>
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -309,6 +364,14 @@ function CalculatorForm({
       value: inputs.starterHydration,
       step: 0.1,
       icon: Droplets,
+    },
+    {
+      field: 'oilPercentage',
+      label: 'Olio',
+      unit: '%',
+      value: inputs.oilPercentage,
+      step: 0.1,
+      icon: OilIcon,
     },
   ];
 
@@ -378,6 +441,7 @@ function ResultCards({ results }: { results: ReturnType<typeof calculateBread> }
           ['Farina totale', results.flourTotal],
           ['Acqua totale', results.waterTotal, true],
           ['Sale', results.salt],
+          ['Olio', results.oil],
           ['Starter', results.starter],
         ]}
       />
@@ -392,6 +456,7 @@ function ResultCards({ results }: { results: ReturnType<typeof calculateBread> }
         <div className="divide-y divide-stone-200">
           <ResultRow label="Farina da aggiungere" value={results.flourToAdd} />
           <ResultRow label="Acqua da aggiungere" value={results.waterToAdd} emphasis="green" />
+          <ResultRow label="Olio da aggiungere" value={results.oil} />
         </div>
       </section>
 
@@ -466,12 +531,12 @@ function QuickGuidelines() {
   const guidelines = [
     {
       title: 'Idratazione',
-      text: 'Piu idratazione = mollica piu soffice ma impasto piu delicato.',
+      text: 'Più idratazione = mollica più soffice ma impasto più delicato.',
       icon: Droplets,
     },
     {
       title: 'Autolisi',
-      text: '20-60 min migliorano estensibilita e sviluppo del glutine.',
+      text: '20-60 min migliorano estensibilità e sviluppo del glutine.',
       icon: Clock3,
     },
     {
@@ -486,7 +551,7 @@ function QuickGuidelines() {
     },
     {
       title: 'Pianifica',
-      text: 'Fermentazioni lente in frigo migliorano aroma e digeribilita.',
+      text: 'Fermentazioni lente in frigo migliorano aroma e digeribilità.',
       icon: CalendarDays,
     },
   ];
@@ -605,6 +670,26 @@ function JarIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ariaH
       <path d="M12 8v3.1c-1.4.9-2.2 2.4-2.2 4v9.1c0 1.6 1.3 2.8 2.8 2.8h6.8c1.6 0 2.8-1.3 2.8-2.8v-9.1c0-1.7-.8-3.2-2.2-4V8" />
       <path d="M10 17.3h12" />
       <path d="M13.4 21h5.2" />
+    </svg>
+  );
+}
+
+function OilIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ariaHidden }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden={ariaHidden}
+    >
+      <path d="M16 5.5c4.2 4.8 7 8.7 7 12.7a7 7 0 0 1-14 0c0-4 2.8-7.9 7-12.7Z" />
+      <path d="M13.3 20.4c.7 1.2 1.7 1.8 3.1 1.8" />
     </svg>
   );
 }
