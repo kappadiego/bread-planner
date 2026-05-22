@@ -8,12 +8,14 @@ export type BreadInputs = {
   saltPercentage: number;
   starterPercentage: number;
   starterHydration: number;
+  oilPercentage: number;
 };
 
 export type BreadResults = {
   flourTotal: number;
   waterTotal: number;
   salt: number;
+  oil: number;
   starter: number;
   starterFlour: number;
   starterWater: number;
@@ -30,6 +32,7 @@ export const calculateBread = (inputs: BreadInputs): BreadResults => {
   const saltPercentage = safeNumber(inputs.saltPercentage);
   const starterPercentage = safeNumber(inputs.starterPercentage);
   const starterHydration = safeNumber(inputs.starterHydration);
+  const oilPercentage = safeNumber(inputs.oilPercentage);
 
   const flourTotal =
     inputs.mode === 'finalWeight'
@@ -38,6 +41,7 @@ export const calculateBread = (inputs: BreadInputs): BreadResults => {
 
   const waterTotal = flourTotal * hydration / 100;
   const salt = flourTotal * saltPercentage / 100;
+  const oil = flourTotal * oilPercentage / 100;
   const starter = flourTotal * starterPercentage / 100;
   const starterFlour = starter / (1 + starterHydration / 100);
   const starterWater = starter - starterFlour;
@@ -48,12 +52,13 @@ export const calculateBread = (inputs: BreadInputs): BreadResults => {
     flourTotal,
     waterTotal,
     salt,
+    oil,
     starter,
     starterFlour,
     starterWater,
     flourToAdd,
     waterToAdd,
-    estimatedFinalWeight: flourTotal + waterTotal + salt,
+    estimatedFinalWeight: flourTotal + waterTotal + salt + oil,
     hasNegativeAdditions: flourToAdd < 0 || waterToAdd < 0,
   };
 };
