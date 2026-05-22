@@ -28,7 +28,7 @@ export const timelinePresets: TimelinePreset[] = [
   {
     id: 'high-hydration',
     label: 'Alta idratazione',
-    description: 'Pieghe piu ravvicinate per dare struttura all impasto.',
+    description: 'Pieghe più ravvicinate per dare struttura all’impasto.',
     steps: [
       { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 45 },
       { id: 'coil-1', label: 'Coil fold', durationMinutes: 20 },
