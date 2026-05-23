@@ -1,15 +1,16 @@
-export type CalculatorMode = 'flour' | 'finalWeight';
-
-export type BreadInputs = {
-  mode: CalculatorMode;
-  flourTotal: number;
-  finalWeight: number;
+export type FormulaPercentages = {
   hydration: number;
   saltPercentage: number;
   starterPercentage: number;
   starterHydration: number;
   oilPercentage: number;
 };
+
+export type BatchTarget = {
+  flourTotal: number;
+};
+
+export type BreadInputs = BatchTarget & FormulaPercentages;
 
 export type BreadResults = {
   flourTotal: number;
@@ -21,6 +22,7 @@ export type BreadResults = {
   starterWater: number;
   flourToAdd: number;
   waterToAdd: number;
+  estimatedDoughWeight: number;
   estimatedFinalWeight: number;
   hasNegativeAdditions: boolean;
 };
@@ -28,16 +30,12 @@ export type BreadResults = {
 const safeNumber = (value: number) => (Number.isFinite(value) ? Math.max(value, 0) : 0);
 
 export const calculateBread = (inputs: BreadInputs): BreadResults => {
+  const flourTotal = safeNumber(inputs.flourTotal);
   const hydration = safeNumber(inputs.hydration);
   const saltPercentage = safeNumber(inputs.saltPercentage);
   const starterPercentage = safeNumber(inputs.starterPercentage);
   const starterHydration = safeNumber(inputs.starterHydration);
   const oilPercentage = safeNumber(inputs.oilPercentage);
-
-  const flourTotal =
-    inputs.mode === 'finalWeight'
-      ? safeNumber(inputs.finalWeight) / (1 + hydration / 100 + saltPercentage / 100)
-      : safeNumber(inputs.flourTotal);
 
   const waterTotal = flourTotal * hydration / 100;
   const salt = flourTotal * saltPercentage / 100;
@@ -45,8 +43,9 @@ export const calculateBread = (inputs: BreadInputs): BreadResults => {
   const starter = flourTotal * starterPercentage / 100;
   const starterFlour = starter / (1 + starterHydration / 100);
   const starterWater = starter - starterFlour;
-  const flourToAdd = flourTotal - starterFlour;
-  const waterToAdd = waterTotal - starterWater;
+  const flourToAdd = flourTotal;
+  const waterToAdd = waterTotal;
+  const estimatedDoughWeight = flourTotal + waterTotal + starter + salt + oil;
 
   return {
     flourTotal,
@@ -58,8 +57,9 @@ export const calculateBread = (inputs: BreadInputs): BreadResults => {
     starterWater,
     flourToAdd,
     waterToAdd,
-    estimatedFinalWeight: flourTotal + waterTotal + salt + oil,
-    hasNegativeAdditions: flourToAdd < 0 || waterToAdd < 0,
+    estimatedDoughWeight,
+    estimatedFinalWeight: estimatedDoughWeight,
+    hasNegativeAdditions: false,
   };
 };
 

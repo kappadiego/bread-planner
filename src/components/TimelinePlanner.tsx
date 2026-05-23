@@ -11,90 +11,17 @@ import {
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { timelinePresets, type TimelineStep } from '../timeline';
-
-type TimerStatus = 'idle' | 'running' | 'paused' | 'finished';
-
-type TimerState = {
-  status: TimerStatus;
-  startedAt: number | null;
-  pausedAt: number | null;
-  accumulatedPauseMs: number;
-};
-
-type CurrentStepInfo = {
-  index: number;
-  step: TimelineStep;
-  stepStartMs: number;
-  stepEndMs: number;
-  elapsedInStepMs: number;
-  remainingInStepMs: number;
-};
-
-const initialTimer: TimerState = {
-  status: 'idle',
-  startedAt: null,
-  pausedAt: null,
-  accumulatedPauseMs: 0,
-};
+import {
+  formatDuration,
+  getCurrentStepInfo,
+  getElapsedMs,
+  getTotalDurationMs,
+  initialTimer,
+  safeDuration,
+  type TimerState,
+} from '../timelineUtils';
 
 const cloneSteps = (steps: TimelineStep[]) => steps.map((step) => ({ ...step }));
-
-const safeDuration = (durationMinutes: number) =>
-  Number.isFinite(durationMinutes) ? Math.max(0, durationMinutes) : 0;
-
-const getElapsedMs = (timer: TimerState) => {
-  if (timer.startedAt === null) {
-    return 0;
-  }
-
-  const now = timer.status === 'paused' && timer.pausedAt !== null ? timer.pausedAt : Date.now();
-
-  return Math.max(0, now - timer.startedAt - timer.accumulatedPauseMs);
-};
-
-const getTotalDurationMs = (steps: TimelineStep[]) =>
-  steps.reduce((total, step) => total + safeDuration(step.durationMinutes) * 60 * 1000, 0);
-
-const getCurrentStepInfo = (
-  steps: TimelineStep[],
-  elapsedMs: number,
-): CurrentStepInfo | null => {
-  let accumulated = 0;
-
-  for (let index = 0; index < steps.length; index += 1) {
-    const stepDurationMs = safeDuration(steps[index].durationMinutes) * 60 * 1000;
-    const stepStartMs = accumulated;
-    const stepEndMs = accumulated + stepDurationMs;
-
-    if (elapsedMs < stepEndMs) {
-      return {
-        index,
-        step: steps[index],
-        stepStartMs,
-        stepEndMs,
-        elapsedInStepMs: elapsedMs - stepStartMs,
-        remainingInStepMs: stepEndMs - elapsedMs,
-      };
-    }
-
-    accumulated += stepDurationMs;
-  }
-
-  return null;
-};
-
-const formatDuration = (ms: number) => {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
-  }
-
-  return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
-};
 
 export function TimelinePlanner() {
   const [selectedPresetId, setSelectedPresetId] = useState(timelinePresets[0].id);

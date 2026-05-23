@@ -2,12 +2,11 @@
 
 Web app responsive per calcolare ingredienti base di pane con starter/lievito madre usando le percentuali del panificatore.
 
-## Funzioni
+## Uso semplice
 
-- Calcolo ingredienti con percentuali del panificatore.
-- Modalita da farina totale o da peso finale.
-- Preset per pane base, alta idratazione e focaccia.
-- Piano di lavorazione con preset, step modificabili, riordino via drag handle e timer progressivo.
+Apri `index.html` nel browser. Non serve avviare un server locale.
+
+La versione standalone include anche il piano di lavorazione con preset, step modificabili e timer progressivo.
 
 ## Sviluppo React
 
@@ -17,4 +16,4 @@ npm run dev
 npm run build
 ```
 
-Il progetto usa React, TypeScript, Vite e Tailwind CSS.
+Il progetto include anche la versione sorgente in React, TypeScript, Vite e Tailwind CSS.

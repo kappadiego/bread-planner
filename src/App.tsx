@@ -6,13 +6,12 @@ import {
   Clock3,
   Droplets,
   RotateCcw,
-  Scale,
   Thermometer,
   Wheat,
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { calculateBread, type BreadInputs, type CalculatorMode, roundGram } from './calculations';
+import { calculateBread, type BreadInputs, roundGram } from './calculations';
 import { TimelinePlanner } from './components/TimelinePlanner';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
 
@@ -25,21 +24,24 @@ type IconProps = {
 
 type IconComponent = ComponentType<IconProps>;
 
-type ActiveProfileId = DoughProfile['id'] | 'custom';
+type ActiveProfileId = string;
+type InputUnit = 'g' | '%';
+type ConvertibleField = 'saltPercentage' | 'starterPercentage' | 'oilPercentage';
+type UnitModes = Record<ConvertibleField, InputUnit>;
+type GramValues = Record<ConvertibleField, number>;
 
 type FieldConfig = {
   field: keyof BreadInputs;
   label: string;
-  unit: 'g' | '%';
+  unit: InputUnit;
   value: number;
   step?: number;
   icon: IconComponent;
+  convertibleField?: ConvertibleField;
 };
 
 const initialInputs: BreadInputs = {
-  mode: 'flour',
   flourTotal: 1000,
-  finalWeight: 1000,
   hydration: 65,
   saltPercentage: 2,
   starterPercentage: 20,
@@ -47,28 +49,122 @@ const initialInputs: BreadInputs = {
   oilPercentage: 0,
 };
 
+const convertibleFields: ConvertibleField[] = ['saltPercentage', 'starterPercentage', 'oilPercentage'];
+
+const initialUnitModes: UnitModes = {
+  saltPercentage: '%',
+  starterPercentage: '%',
+  oilPercentage: '%',
+};
+
+const safeNumber = (value: number) => (Number.isFinite(value) ? Math.max(value, 0) : 0);
+
+const percentFromGrams = (grams: number, flourTotal: number) => {
+  const safeFlour = safeNumber(flourTotal);
+  return safeFlour > 0 ? safeNumber(grams) / safeFlour * 100 : 0;
+};
+
+const gramsFromPercent = (field: ConvertibleField, inputs: BreadInputs) => {
+  const flourTotal = safeNumber(inputs.flourTotal);
+  return flourTotal * safeNumber(inputs[field]) / 100;
+};
+
+const getGramValues = (inputs: BreadInputs): GramValues => ({
+  saltPercentage: gramsFromPercent('saltPercentage', inputs),
+  starterPercentage: gramsFromPercent('starterPercentage', inputs),
+  oilPercentage: gramsFromPercent('oilPercentage', inputs),
+});
+
+const getEffectiveInputs = (
+  inputs: BreadInputs,
+  unitModes: UnitModes,
+  gramValues: GramValues,
+): BreadInputs => {
+  const nextInputs = { ...inputs };
+
+  convertibleFields.forEach((field) => {
+    if (unitModes[field] === 'g') {
+      nextInputs[field] = percentFromGrams(gramValues[field], nextInputs.flourTotal);
+    }
+  });
+
+  return nextInputs;
+};
+
 function App() {
   const [inputs, setInputs] = useState<BreadInputs>(initialInputs);
+  const [unitModes, setUnitModes] = useState<UnitModes>(initialUnitModes);
+  const [gramValues, setGramValues] = useState<GramValues>(() => getGramValues(initialInputs));
   const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>('base');
   const [customProfileName, setCustomProfileName] = useState('Custom');
 
-  const results = useMemo(() => calculateBread(inputs), [inputs]);
+  const effectiveInputs = useMemo(
+    () => getEffectiveInputs(inputs, unitModes, gramValues),
+    [inputs, unitModes, gramValues],
+  );
+  const results = useMemo(() => calculateBread(effectiveInputs), [effectiveInputs]);
 
-  const updateInput = (field: keyof BreadInputs, value: number | CalculatorMode) => {
-    setInputs((current) => ({ ...current, [field]: value }));
+  const updateInput = (field: keyof BreadInputs, value: number) => {
+    const safeValue = safeNumber(value);
+
+    if (field === 'flourTotal') {
+      setInputs((current) => {
+        const nextInputs = { ...current, flourTotal: safeValue };
+        convertibleFields.forEach((currentField) => {
+          if (unitModes[currentField] === 'g') {
+            nextInputs[currentField] = percentFromGrams(gramValues[currentField], safeValue);
+          }
+        });
+        return nextInputs;
+      });
+    } else if (convertibleFields.includes(field as ConvertibleField) && unitModes[field as ConvertibleField] === 'g') {
+      const currentField = field as ConvertibleField;
+      setGramValues((current) => ({ ...current, [currentField]: safeValue }));
+      setInputs((current) => ({
+        ...current,
+        [currentField]: percentFromGrams(safeValue, current.flourTotal),
+      }));
+    } else {
+      setInputs((current) => ({ ...current, [field]: safeValue }));
+    }
+
     setActiveProfileId('custom');
+  };
+
+  const updateUnitMode = (field: ConvertibleField, unit: InputUnit) => {
+    if (unitModes[field] === unit) {
+      return;
+    }
+
+    if (unit === 'g') {
+      setGramValues((current) => ({
+        ...current,
+        [field]: gramsFromPercent(field, effectiveInputs),
+      }));
+      setUnitModes((current) => ({ ...current, [field]: 'g' }));
+      return;
+    }
+
+    const nextPercentage = percentFromGrams(gramValues[field], inputs.flourTotal);
+    setInputs((current) => ({ ...current, [field]: nextPercentage }));
+    setUnitModes((current) => ({ ...current, [field]: '%' }));
   };
 
   const reset = () => {
     setInputs(initialInputs);
+    setUnitModes(initialUnitModes);
+    setGramValues(getGramValues(initialInputs));
     setActiveProfileId('base');
     setCustomProfileName('Custom');
   };
 
   const applyProfile = (profile: DoughProfile) => {
+    const nextInputs = { ...inputs, ...profile.values };
     setActiveProfileId(profile.id);
     setCustomProfileName('Custom');
-    setInputs((current) => ({ ...current, ...profile.values }));
+    setUnitModes(initialUnitModes);
+    setInputs(nextInputs);
+    setGramValues(getGramValues(nextInputs));
   };
 
   const selectCustomProfile = () => {
@@ -77,7 +173,7 @@ function App() {
 
   const customDisplayName = customProfileName.trim() || 'Custom';
 
-  const getProfileIcon = (profileId: DoughProfile['id']): IconComponent => {
+  const getProfileIcon = (profileId: string): IconComponent => {
     if (profileId === 'high') {
       return Droplets;
     }
@@ -106,11 +202,13 @@ function App() {
                 onCustomProfileNameChange={setCustomProfileName}
               />
 
-              <div className="mt-6">
-                <ModeTabs mode={inputs.mode} onChange={(mode) => updateInput('mode', mode)} />
-              </div>
-
-              <CalculatorForm inputs={inputs} onChange={updateInput} />
+              <CalculatorForm
+                inputs={effectiveInputs}
+                unitModes={unitModes}
+                gramValues={gramValues}
+                onChange={updateInput}
+                onUnitChange={updateUnitMode}
+              />
 
             </div>
           </div>
@@ -182,40 +280,6 @@ function HeaderAction({
   );
 }
 
-function ModeTabs({
-  mode,
-  onChange,
-}: {
-  mode: CalculatorMode;
-  onChange: (mode: CalculatorMode) => void;
-}) {
-  const tabs: Array<{ id: CalculatorMode; label: string; icon: ReactNode }> = [
-    { id: 'flour', label: 'Parto dalla farina', icon: <Wheat size={22} strokeWidth={1.75} /> },
-    { id: 'finalWeight', label: 'Parto dal peso finale', icon: <Scale size={22} strokeWidth={1.75} /> },
-  ];
-
-  return (
-    <div className="grid overflow-hidden rounded-lg border border-stone-200 bg-stone-50 shadow-inner-soft sm:grid-cols-2">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onChange(tab.id)}
-          aria-selected={mode === tab.id}
-          className={`relative flex min-h-[56px] items-center justify-center gap-3 px-4 text-base font-semibold transition ${
-            mode === tab.id
-              ? 'bg-white text-amber-700 after:absolute after:inset-x-0 after:bottom-0 after:h-1 after:bg-amber-600'
-              : 'text-stone-600 hover:bg-white/70 hover:text-ink'
-          }`}
-        >
-          {tab.icon}
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function DoughProfileSelector({
   activeProfileId,
   customDisplayName,
@@ -230,7 +294,7 @@ function DoughProfileSelector({
   customDisplayName: string;
   customProfileName: string;
   profiles: DoughProfile[];
-  getProfileIcon: (profileId: DoughProfile['id']) => IconComponent;
+  getProfileIcon: (profileId: string) => IconComponent;
   onSelectProfile: (profile: DoughProfile) => void;
   onSelectCustom: () => void;
   onCustomProfileNameChange: (value: string) => void;
@@ -309,33 +373,28 @@ function DoughProfileSelector({
 
 function CalculatorForm({
   inputs,
+  unitModes,
+  gramValues,
   onChange,
+  onUnitChange,
 }: {
   inputs: BreadInputs;
-  onChange: (field: keyof BreadInputs, value: number | CalculatorMode) => void;
+  unitModes: UnitModes;
+  gramValues: GramValues;
+  onChange: (field: keyof BreadInputs, value: number) => void;
+  onUnitChange: (field: ConvertibleField, unit: InputUnit) => void;
 }) {
-  const baseField: FieldConfig =
-    inputs.mode === 'flour'
-      ? {
-          field: 'flourTotal',
-          label: 'Farina totale',
-          unit: 'g',
-          value: inputs.flourTotal,
-          icon: Wheat,
-        }
-      : {
-          field: 'finalWeight',
-          label: 'Peso finale',
-          unit: 'g',
-          value: inputs.finalWeight,
-          icon: Scale,
-        };
-
   const fields: FieldConfig[] = [
-    baseField,
+    {
+      field: 'flourTotal',
+      label: 'Farina',
+      unit: 'g',
+      value: inputs.flourTotal,
+      icon: Wheat,
+    },
     {
       field: 'hydration',
-      label: 'Idratazione impasto',
+      label: 'Idratazione',
       unit: '%',
       value: inputs.hydration,
       step: 0.1,
@@ -344,18 +403,20 @@ function CalculatorForm({
     {
       field: 'saltPercentage',
       label: 'Sale',
-      unit: '%',
-      value: inputs.saltPercentage,
-      step: 0.1,
+      unit: unitModes.saltPercentage,
+      value: unitModes.saltPercentage === 'g' ? gramValues.saltPercentage : inputs.saltPercentage,
+      step: unitModes.saltPercentage === 'g' ? 1 : 0.1,
       icon: SaltIcon,
+      convertibleField: 'saltPercentage',
     },
     {
       field: 'starterPercentage',
       label: 'Starter',
-      unit: '%',
-      value: inputs.starterPercentage,
-      step: 0.1,
+      unit: unitModes.starterPercentage,
+      value: unitModes.starterPercentage === 'g' ? gramValues.starterPercentage : inputs.starterPercentage,
+      step: unitModes.starterPercentage === 'g' ? 1 : 0.1,
       icon: JarIcon,
+      convertibleField: 'starterPercentage',
     },
     {
       field: 'starterHydration',
@@ -368,10 +429,11 @@ function CalculatorForm({
     {
       field: 'oilPercentage',
       label: 'Olio',
-      unit: '%',
-      value: inputs.oilPercentage,
-      step: 0.1,
+      unit: unitModes.oilPercentage,
+      value: unitModes.oilPercentage === 'g' ? gramValues.oilPercentage : inputs.oilPercentage,
+      step: unitModes.oilPercentage === 'g' ? 1 : 0.1,
       icon: OilIcon,
+      convertibleField: 'oilPercentage',
     },
   ];
 
@@ -385,7 +447,9 @@ function CalculatorForm({
           value={field.value}
           step={field.step}
           icon={field.icon}
+          convertibleField={field.convertibleField}
           onChange={(value) => onChange(field.field, value)}
+          onUnitChange={field.convertibleField ? (unit) => onUnitChange(field.convertibleField!, unit) : undefined}
         />
       ))}
     </form>
@@ -398,23 +462,30 @@ function NumberField({
   value,
   step = 1,
   icon: Icon,
+  convertibleField,
   onChange,
+  onUnitChange,
 }: {
   label: string;
-  unit: 'g' | '%';
+  unit: InputUnit;
   value: number;
   step?: number;
   icon: IconComponent;
+  convertibleField?: ConvertibleField;
   onChange: (value: number) => void;
+  onUnitChange?: (unit: InputUnit) => void;
 }) {
+  const inputId = `field-${convertibleField ?? label.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
-    <label className="grid gap-3 border-b border-stone-200 px-4 py-3 last:border-b-0 sm:grid-cols-[1fr_260px] sm:items-center">
-      <span className="flex min-w-0 items-center gap-4 text-base font-semibold text-ink">
+    <div className="grid gap-3 border-b border-stone-200 px-4 py-3 last:border-b-0 sm:grid-cols-[1fr_260px] sm:items-center">
+      <label htmlFor={inputId} className="flex min-w-0 items-center gap-4 text-base font-semibold text-ink">
         <Icon size={25} strokeWidth={1.85} className="shrink-0 text-stone-900" aria-hidden="true" />
         <span className="min-w-0">{label}</span>
-      </span>
+      </label>
       <span className="flex min-h-12 overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:border-amber-500 focus-within:ring-4 focus-within:ring-amber-100">
         <input
+          id={inputId}
           type="number"
           min="0"
           step={step}
@@ -422,51 +493,61 @@ function NumberField({
           onChange={(event) => onChange(event.currentTarget.valueAsNumber || 0)}
           className="w-full min-w-0 bg-transparent px-3 text-[22px] font-medium text-ink outline-none"
         />
-        <span className="grid w-12 place-items-center border-l border-stone-200 bg-stone-50 text-base font-medium text-stone-700">
-          {unit}
-        </span>
+        {onUnitChange ? (
+          <span className="flex items-center gap-1 border-l border-stone-200 bg-stone-50 p-1">
+            {(['%', 'g'] as InputUnit[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onUnitChange(option)}
+                className={`grid h-9 min-w-9 place-items-center rounded-md px-2 text-sm font-semibold transition ${
+                  unit === option
+                    ? 'bg-white text-amber-700 shadow-sm ring-1 ring-stone-200'
+                    : 'text-stone-500 hover:text-ink'
+                }`}
+                aria-pressed={unit === option}
+              >
+                {option}
+              </button>
+            ))}
+          </span>
+        ) : (
+          <span className="grid w-12 place-items-center border-l border-stone-200 bg-stone-50 text-base font-medium text-stone-700">
+            {unit}
+          </span>
+        )}
       </span>
-    </label>
+    </div>
   );
 }
 
 function ResultCards({ results }: { results: ReturnType<typeof calculateBread> }) {
   return (
     <>
-      <ResultCard
-        title="Risultato totale"
-        tone="amber"
-        icon={<BagIcon size={30} strokeWidth={1.75} aria-hidden="true" />}
-        rows={[
-          ['Farina totale', results.flourTotal],
-          ['Acqua totale', results.waterTotal, true],
-          ['Sale', results.salt],
-          ['Olio', results.oil],
-          ['Starter', results.starter],
-        ]}
-      />
-
       <section className="rounded-[12px] border border-stone-200 bg-white p-6 shadow-air ring-1 ring-black/[0.02] border-l-[5px] border-l-proof-600">
         <div className="mb-5 flex items-center gap-4 text-[24px] font-semibold text-proof-700">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-proof-100 text-proof-700">
             <BowlIcon size={28} strokeWidth={1.75} aria-hidden="true" />
           </span>
-          Ingredienti da pesare
+          Ingredienti
         </div>
         <div className="divide-y divide-stone-200">
-          <ResultRow label="Farina da aggiungere" value={results.flourToAdd} />
-          <ResultRow label="Acqua da aggiungere" value={results.waterToAdd} emphasis="green" />
-          <ResultRow label="Olio da aggiungere" value={results.oil} />
+          <ResultRow label="Farina" value={results.flourTotal} />
+          <ResultRow label="Acqua" value={results.waterTotal} />
+          <ResultRow label="Starter" value={results.starter} />
+          <ResultRow label="Sale" value={results.salt} />
+          <ResultRow label="Olio" value={results.oil} />
+          <ResultRow label="Peso impasto stimato" value={results.estimatedDoughWeight} tone="green" weight="regular" />
         </div>
       </section>
 
       <ResultCard
-        title="Composizione starter"
+        title="Starter"
         tone="blue"
-        icon={<JarIcon size={27} strokeWidth={1.75} aria-hidden="true" />}
+        icon={<BagIcon size={30} strokeWidth={1.75} aria-hidden="true" />}
         rows={[
-          ['Farina nello starter', results.starterFlour],
-          ['Acqua nello starter', results.starterWater],
+          ['Farina', results.starterFlour],
+          ['Acqua', results.starterWater],
         ]}
       />
     </>
@@ -499,7 +580,7 @@ function ResultCard({
       </div>
       <div className="divide-y divide-stone-200">
         {rows.map(([label, value, highlight]) => (
-          <ResultRow key={label} label={label} value={value} emphasis={highlight ? 'green' : undefined} />
+          <ResultRow key={label} label={label} value={value} tone={highlight ? 'green' : undefined} />
         ))}
       </div>
     </section>
@@ -509,18 +590,20 @@ function ResultCard({
 function ResultRow({
   label,
   value,
-  emphasis,
+  tone,
+  weight = 'semibold',
 }: {
   label: string;
   value: number;
-  emphasis?: 'green';
+  tone?: 'green';
+  weight?: 'regular' | 'semibold';
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-3 first:pt-0 last:pb-0">
-      <span className={`text-[18px] ${emphasis === 'green' ? 'font-semibold text-proof-700' : 'text-stone-700'}`}>
+      <span className={`text-[18px] ${tone === 'green' ? 'text-proof-700' : 'text-stone-700'} ${weight === 'semibold' ? 'font-semibold' : 'font-normal'}`}>
         {label}
       </span>
-      <span className={`whitespace-nowrap text-[20px] font-semibold ${emphasis === 'green' ? 'text-proof-700' : 'text-ink'}`}>
+      <span className={`whitespace-nowrap text-[20px] ${weight === 'semibold' ? 'font-semibold' : 'font-normal'} ${tone === 'green' ? 'text-proof-700' : 'text-ink'}`}>
         {formatGram(value)}
       </span>
     </div>

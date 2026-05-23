@@ -3,14 +3,1427 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Bread Planner calcola farina, acqua, sale e starter per pane con lievito madre usando le percentuali del panificatore."
-    />
     <title>Bread Planner</title>
+    <style>
+      :root {
+        --flour: #f8f5ef;
+        --ink: #1f2522;
+        --muted: #68625b;
+        --line: #ded9d0;
+        --amber: #b66f00;
+        --amber-soft: #fff6e6;
+        --green: #26824b;
+        --green-soft: #edf8f1;
+        --blue: #1668b8;
+        --blue-soft: #eaf4ff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(217, 166, 66, 0.1), transparent 30rem),
+          linear-gradient(180deg, #fbfaf7 0%, var(--flour) 100%);
+      }
+
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+
+      .i {
+        width: 1.35em;
+        height: 1.35em;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .topbar {
+        border-bottom: 1px solid var(--line);
+        background: rgba(255,255,255,.9);
+        backdrop-filter: blur(16px);
+      }
+
+      .topbar-inner, .page {
+        width: min(100%, 1510px);
+        margin: 0 auto;
+        padding-inline: 16px;
+      }
+
+      .topbar-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding-block: 18px;
+      }
+
+      .brand, .actions, .action, .tab, .preset, .card-title, .guide-title {
+        display: flex;
+        align-items: center;
+      }
+
+      .brand { gap: 14px; }
+
+      .logo {
+        display: grid;
+        width: 56px;
+        height: 44px;
+        place-items: center;
+        border: 2px solid rgba(182,111,0,.75);
+        border-radius: 999px;
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .logo .i, .bubble .i, .guide-icon .i {
+        width: 62%;
+        height: 62%;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(26px, 2.8vw, 30px);
+        line-height: 1.05;
+      }
+
+      .actions {
+        flex-wrap: wrap;
+        gap: 18px;
+      }
+
+      .action {
+        min-height: 36px;
+        gap: 8px;
+        border: 0;
+        background: transparent;
+        color: #4f4a44;
+        font-weight: 500;
+      }
+
+      .page {
+        display: grid;
+        gap: 24px;
+        padding-block: 24px;
+      }
+
+      .layout {
+        display: grid;
+        gap: 28px;
+      }
+
+      .shell, .inner, .result-card, .guides {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255,255,255,.86);
+        box-shadow: 0 14px 42px rgba(31,37,34,.08);
+      }
+
+      .shell { padding: 16px; }
+
+      .inner {
+        padding: 16px;
+        background: #fff;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 1px 2px rgba(31,37,34,.04);
+      }
+
+      .tabs {
+        display: grid;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f6f4f0;
+      }
+
+      .tab {
+        position: relative;
+        min-height: 58px;
+        justify-content: center;
+        gap: 12px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .tab.active {
+        background: #fff;
+        color: var(--amber);
+      }
+
+      .tab.active::after {
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        height: 4px;
+        background: var(--amber);
+        content: "";
+      }
+
+      .profile-section {
+        margin-top: 0;
+      }
+
+      .profile-section h2 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.25;
+      }
+
+      .profile-section p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .presets {
+        display: grid;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .preset {
+        min-height: 94px;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 12px;
+        border: 1px solid #cfc8bd;
+        border-radius: 10px;
+        background: #fff;
+        color: var(--muted);
+        padding: 16px;
+        font-size: 16px;
+        font-weight: 700;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .preset.active {
+        border-color: var(--amber);
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .preset:focus-visible {
+        outline: 4px solid rgba(217, 119, 6, .16);
+        outline-offset: 2px;
+      }
+
+      .preset-text {
+        display: grid;
+        gap: 4px;
+      }
+
+      .preset-text span {
+        color: #6f6860;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.35;
+      }
+
+      .custom-name-input {
+        display: none;
+        min-height: 36px;
+        width: 100%;
+        border: 1px solid #e8c88d;
+        border-radius: 9px;
+        background: #fff;
+        padding: 0 12px;
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 700;
+        cursor: text;
+      }
+
+      .preset.active .custom-name-input {
+        display: block;
+      }
+
+      .preset.active .custom-name-label {
+        display: none;
+      }
+
+      .form {
+        margin-top: 24px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .field {
+        display: grid;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .field:last-child { border-bottom: 0; }
+
+      .field-label {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .input-wrap {
+        display: flex;
+        min-height: 50px;
+        overflow: hidden;
+        border: 1px solid #cfc8bd;
+        border-radius: 9px;
+        background: #fff;
+      }
+
+      input {
+        min-width: 0;
+        width: 100%;
+        border: 0;
+        outline: 0;
+        padding: 0 14px;
+        color: var(--ink);
+        font-size: 22px;
+        font-weight: 500;
+      }
+
+      .unit {
+        display: grid;
+        width: 52px;
+        place-items: center;
+        border-left: 1px solid var(--line);
+        background: #f8f7f5;
+        font-size: 16px;
+      }
+
+      .unit-toggle {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border-left: 1px solid var(--line);
+        background: #f8f7f5;
+        padding: 4px;
+      }
+
+      .unit-toggle button {
+        display: grid;
+        min-width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: #6f6860;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .unit-toggle button.active {
+        background: #fff;
+        color: var(--amber);
+        box-shadow: 0 0 0 1px rgba(222, 217, 208, .95), 0 1px 2px rgba(31,37,34,.08);
+      }
+
+      .results {
+        display: grid;
+        gap: 20px;
+      }
+
+      .result-card {
+        border-radius: 13px;
+        background: #fff;
+        padding: 24px;
+      }
+
+      .amber { border-left: 5px solid var(--amber); }
+      .green { border-left: 5px solid var(--green); }
+      .blue { border-left: 5px solid var(--blue); }
+
+      .card-title {
+        gap: 16px;
+        margin-bottom: 18px;
+        font-size: 24px;
+        font-weight: 750;
+      }
+
+      .bubble {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        border-radius: 999px;
+      }
+
+      .amber .bubble { background: var(--amber-soft); color: var(--amber); }
+      .green .bubble { background: #dff4e7; color: var(--green); }
+      .blue .bubble { background: var(--blue-soft); color: var(--blue); }
+      .blue .card-title { color: var(--blue); }
+      .green .card-title, .green .highlight { color: var(--green); }
+      .green .soft-highlight { color: var(--green); }
+
+      .result-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 13px 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .result-row:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .result-row span {
+        color: #47423d;
+        font-size: 18px;
+      }
+
+      .result-row strong {
+        white-space: nowrap;
+        font-size: 20px;
+      }
+
+      .result-row.highlight span, .result-row.highlight strong {
+        color: var(--green);
+        font-weight: 750;
+      }
+
+      .result-row.soft-highlight span, .result-row.soft-highlight strong {
+        color: var(--green);
+        font-weight: 400;
+      }
+
+      .timeline {
+        padding: 20px;
+      }
+
+      .timeline-head {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 20px;
+      }
+
+      .timeline h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .timeline-subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .timeline-grid {
+        display: grid;
+        gap: 20px;
+      }
+
+      .timeline-panel {
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: #fff;
+        padding: 16px;
+      }
+
+      .timeline-presets {
+        display: grid;
+        gap: 12px;
+      }
+
+      .timeline-preset {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 12px;
+        text-align: left;
+        color: #514c46;
+      }
+
+      .timeline-preset.active {
+        border-color: var(--amber);
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .timeline-preset strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .timeline-preset span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .steps {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .step-row {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #faf9f7;
+        padding: 12px;
+      }
+
+      .step-row.dragging {
+        border-color: #f2c36b;
+        background: #fff8ea;
+        box-shadow: 0 8px 22px rgba(31,37,34,.08);
+        transform: scale(.99);
+      }
+
+      .step-order {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .drag-handle {
+        display: grid;
+        width: 32px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        color: #817a72;
+        touch-action: none;
+        cursor: grab;
+      }
+
+      .drag-handle:hover {
+        border-color: #f2c36b;
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+
+      .drag-handle svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+
+      .step-number {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border-radius: 999px;
+        background: #fff;
+        color: var(--amber);
+        font-weight: 750;
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+
+      .step-field {
+        display: grid;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .step-field input {
+        min-height: 44px;
+        border: 1px solid #cfc8bd;
+        border-radius: 9px;
+        background: #fff;
+        font-size: 16px;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      .delete-step,
+      .soft-button,
+      .primary-button,
+      .secondary-button {
+        min-height: 42px;
+        border-radius: 9px;
+        font-size: 14px;
+        font-weight: 750;
+      }
+
+      .delete-step {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #8a8178;
+      }
+
+      .delete-step:hover {
+        border-color: #fecaca;
+        background: #fff1f2;
+        color: #dc2626;
+      }
+
+      .soft-button {
+        border: 1px solid #efd29b;
+        background: var(--amber-soft);
+        color: var(--amber);
+        padding: 0 14px;
+      }
+
+      #add-step {
+        margin-top: 28px;
+      }
+
+      .timer-card {
+        border-left: 5px solid var(--amber);
+      }
+
+      .timer-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .current-step {
+        margin-top: 4px;
+        font-size: 24px;
+        font-weight: 780;
+      }
+
+      .timer-metrics {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+        border-radius: 10px;
+        background: #faf9f7;
+        padding: 16px;
+      }
+
+      .timer-metric {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 12px;
+      }
+
+      .timer-metric:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .timer-metric span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .timer-metric strong {
+        text-align: right;
+      }
+
+      .progress-head {
+        display: flex;
+        justify-content: space-between;
+        margin: 18px 0 8px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 750;
+      }
+
+      .progress-track {
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #eee9df;
+      }
+
+      .progress-fill {
+        width: 0;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--amber);
+        transition: width .2s ease;
+      }
+
+      .timer-controls {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .primary-button {
+        border: 0;
+        background: var(--amber);
+        color: #fff;
+        padding: 0 14px;
+      }
+
+      .secondary-button {
+        border: 1px solid #cfc8bd;
+        background: #fff;
+        color: #514c46;
+        padding: 0 14px;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: .45;
+      }
+
+      .empty-steps {
+        border: 1px dashed #cfc8bd;
+        border-radius: 10px;
+        background: #faf9f7;
+        padding: 28px 16px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .guides { padding: 20px; }
+
+      .guide-title {
+        gap: 12px;
+        margin-bottom: 18px;
+        font-size: 22px;
+        font-weight: 750;
+      }
+
+      .guide-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .guide {
+        display: flex;
+        gap: 14px;
+      }
+
+      .guide-icon {
+        display: grid;
+        width: 54px;
+        height: 54px;
+        flex: 0 0 54px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--amber-soft);
+        color: #7b510c;
+        box-shadow: inset 0 0 0 1px rgba(182,111,0,.08);
+      }
+
+      .guide h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .guide p {
+        margin: 7px 0 0;
+        color: #625c55;
+        font-size: 14px;
+        line-height: 1.42;
+      }
+
+      .footnote {
+        margin: 0;
+        text-align: center;
+        color: #817a72;
+        font-size: 14px;
+      }
+
+      @media (min-width: 700px) {
+        .topbar-inner {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          padding-inline: 24px;
+        }
+
+        .page { padding-inline: 24px; }
+        .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .field { grid-template-columns: 1fr 260px; align-items: center; }
+        .timeline-head { flex-direction: row; align-items: end; justify-content: space-between; }
+        .timeline-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .step-row { grid-template-columns: 76px minmax(0, 1fr) 130px 44px; align-items: end; }
+        .timer-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .timer-controls .wide { grid-column: span 2; }
+        .guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+
+      @media (min-width: 1180px) {
+        .layout {
+          grid-template-columns: minmax(560px, .98fr) minmax(520px, .92fr);
+          align-items: start;
+        }
+
+        .timeline-grid { grid-template-columns: minmax(0, .95fr) minmax(420px, .75fr); }
+        .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .timeline-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .guide-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        .guide { border-left: 1px solid var(--line); padding-left: 20px; }
+        .guide:first-child { border-left: 0; padding-left: 0; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <svg width="0" height="0" style="position:absolute">
+      <symbol id="i-bread" viewBox="0 0 32 32"><path d="M5 21.5c0-6.2 4.3-10.7 9.5-10.7 1.7-3.9 7-4.4 9.2-.9 3.2.5 5.3 3.3 5.3 6.7 0 4.2-3.1 7.4-7.5 7.4H8.4C6.5 24 5 22.9 5 21.5Z" /><path d="M14.7 11.1c-.6 1.3-.9 2.7-.7 4.1" /><path d="M21.1 9.4c.6 1.4.7 3 .2 4.5" /></symbol>
+      <symbol id="i-focaccia" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10.5" /><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" /><circle cx="19.8" cy="11.8" r="1.1" fill="currentColor" stroke="none" /><circle cx="21" cy="18.8" r="1.1" fill="currentColor" stroke="none" /><circle cx="13.6" cy="21" r="1.1" fill="currentColor" stroke="none" /></symbol>
+      <symbol id="i-wheat" viewBox="0 0 32 32"><path d="M16 5v22" /><path d="M16 11c-3.4 0-5.8-2.1-6.8-5.5C12.6 5.5 15 7.6 16 11Z" /><path d="M16 16c-3.4 0-5.8-2.1-6.8-5.5C12.6 10.5 15 12.6 16 16Z" /><path d="M16 21c-3.4 0-5.8-2.1-6.8-5.5C12.6 15.5 15 17.6 16 21Z" /><path d="M16 11c3.4 0 5.8-2.1 6.8-5.5C19.4 5.5 17 7.6 16 11Z" /><path d="M16 16c3.4 0 5.8-2.1 6.8-5.5C19.4 10.5 17 12.6 16 16Z" /></symbol>
+      <symbol id="i-drop" viewBox="0 0 32 32"><path d="M16 4.5C11.2 10.6 8.8 15 8.8 18.4a7.2 7.2 0 0 0 14.4 0C23.2 15 20.8 10.6 16 4.5Z" /></symbol>
+      <symbol id="i-oil" viewBox="0 0 32 32"><path d="M16 5.5c4.2 4.8 7 8.7 7 12.7a7 7 0 0 1-14 0c0-4 2.8-7.9 7-12.7Z" /><path d="M13.3 20.4c.7 1.2 1.7 1.8 3.1 1.8" /></symbol>
+      <symbol id="i-scale" viewBox="0 0 32 32"><path d="M16 6v20" /><path d="M8 10h16" /><path d="m9 10-4 8h8l-4-8Z" /><path d="m23 10-4 8h8l-4-8Z" /></symbol>
+      <symbol id="i-salt" viewBox="0 0 32 32"><path d="M12 8.5h8" /><path d="M13 8.5v4.2l-2.1 3.1a5 5 0 0 0-.8 2.7v6.2c0 1.4 1.1 2.5 2.5 2.5h6.8c1.4 0 2.5-1.1 2.5-2.5v-6.2c0-1-.3-1.9-.8-2.7L19 12.7V8.5" /><path d="M11 18.5h10" /><path d="M14 5.5h4" /></symbol>
+      <symbol id="i-jar" viewBox="0 0 32 32"><path d="M11 8h10" /><path d="M12 5.5h8" /><path d="M12 8v3.1c-1.4.9-2.2 2.4-2.2 4v9.1c0 1.6 1.3 2.8 2.8 2.8h6.8c1.6 0 2.8-1.3 2.8-2.8v-9.1c0-1.7-.8-3.2-2.2-4V8" /><path d="M10 17.3h12" /><path d="M13.4 21h5.2" /></symbol>
+      <symbol id="i-bag" viewBox="0 0 32 32"><path d="M10.5 12.5h11L24 26H8l2.5-13.5Z" /><path d="M12.5 12.5c0-3 1.5-5 3.5-5s3.5 2 3.5 5" /><path d="M13.2 18.6c1.8-1.3 3.8-1.3 5.6 0" /><path d="M14.4 22.1h3.2" /></symbol>
+      <symbol id="i-bowl" viewBox="0 0 32 32"><path d="M7 14h18c-.5 6.7-4 10.5-9 10.5S7.5 20.7 7 14Z" /><path d="M10 24.5h12" /><path d="M11 10c1.6 1.2 3.2 1.2 5 0s3.4-1.2 5 0" /></symbol>
+      <symbol id="i-bulb" viewBox="0 0 32 32"><path d="M16 5.5a8 8 0 0 0-4.2 14.8c.8.5 1.2 1.4 1.2 2.3v.4h6v-.4c0-1 .5-1.8 1.3-2.3A8 8 0 0 0 16 5.5Z" /><path d="M13 26h6" /><path d="M14 29h4" /></symbol>
+      <symbol id="i-clock" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" /><path d="M16 10v7l4 2" /></symbol>
+      <symbol id="i-thermo" viewBox="0 0 32 32"><path d="M14 18.5V7a2 2 0 1 1 4 0v11.5a5 5 0 1 1-4 0Z" /><path d="M16 21v-7" /></symbol>
+      <symbol id="i-calendar" viewBox="0 0 32 32"><path d="M8 9h16v17H8z" /><path d="M8 14h16" /><path d="M12 6v5" /><path d="M20 6v5" /></symbol>
+      <symbol id="i-help" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" /><path d="M13.5 13.2a3 3 0 1 1 4.6 2.5c-1.1.8-2.1 1.6-2.1 3.1" /><path d="M16 23h.1" /></symbol>
+    </svg>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="logo"><svg class="i"><use href="#i-bread" /></svg></div>
+          <h1>Bread Planner</h1>
+        </div>
+        <nav class="actions">
+          <button class="action" id="reset">↻ Ripristina</button>
+          <button class="action">♡ Salva ricetta</button>
+          <button class="action"><svg class="i"><use href="#i-help" /></svg> Guida</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="layout">
+        <div class="shell">
+          <div class="inner">
+            <section class="profile-section">
+              <h2>Scegli il tipo di impasto</h2>
+              <p>Parti da un profilo base o crea una formula personalizzata.</p>
+
+              <div class="presets">
+                <button class="preset active" data-profile="base"><svg class="i"><use href="#i-bread" /></svg><span class="preset-text"><strong>Pane base</strong><span>Equilibrato, senza grassi aggiunti.</span></span></button>
+                <button class="preset" data-profile="high"><svg class="i"><use href="#i-drop" /></svg><span class="preset-text"><strong>Alta idratazione</strong><span>Più acqua, impasto più delicato.</span></span></button>
+                <button class="preset" data-profile="focaccia"><svg class="i"><use href="#i-focaccia" /></svg><span class="preset-text"><strong>Focaccia</strong><span>Impasto morbido, con olio.</span></span></button>
+                <div class="preset" data-profile="custom" role="button" tabindex="0"><span aria-hidden="true" style="font-size: 25px; line-height: 1;">+</span><span class="preset-text"><strong class="custom-name-label" id="custom-profile-card-name">Custom</strong><input class="custom-name-input" id="custom-profile-name" type="text" value="Custom" placeholder="Custom" aria-label="Nome profilo custom" /><span>Crea il tuo profilo.</span></span></div>
+              </div>
+            </section>
+
+            <form class="form">
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-wheat" /></svg><span id="base-label">Farina</span></span><span class="input-wrap"><input id="base-value" type="number" min="0" value="1000" /><span class="unit">g</span></span></label>
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-drop" /></svg>Idratazione</span><span class="input-wrap"><input id="hydration" type="number" min="0" step="0.1" value="65" /><span class="unit">%</span></span></label>
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-salt" /></svg>Sale</span><span class="input-wrap"><input id="salt" type="number" min="0" step="0.1" value="2" /><span class="unit-toggle" data-field="salt"><button type="button" data-unit="%">%</button><button type="button" data-unit="g">g</button></span></span></label>
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-jar" /></svg>Starter</span><span class="input-wrap"><input id="starter" type="number" min="0" step="0.1" value="20" /><span class="unit-toggle" data-field="starter"><button type="button" data-unit="%">%</button><button type="button" data-unit="g">g</button></span></span></label>
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-drop" /></svg>Idratazione starter</span><span class="input-wrap"><input id="starter-hydration" type="number" min="0" step="0.1" value="100" /><span class="unit">%</span></span></label>
+              <label class="field"><span class="field-label"><svg class="i"><use href="#i-oil" /></svg>Olio</span><span class="input-wrap"><input id="oil" type="number" min="0" step="0.1" value="0" /><span class="unit-toggle" data-field="oil"><button type="button" data-unit="%">%</button><button type="button" data-unit="g">g</button></span></span></label>
+            </form>
+          </div>
+        </div>
+
+        <div class="results">
+          <section class="result-card green"><div class="card-title"><span class="bubble"><svg class="i"><use href="#i-bowl" /></svg></span>Ingredienti</div><div class="result-row"><span>Farina</span><strong id="flour-add"></strong></div><div class="result-row"><span>Acqua</span><strong id="water-add"></strong></div><div class="result-row"><span>Starter</span><strong id="starter-total"></strong></div><div class="result-row"><span>Sale</span><strong id="salt-total"></strong></div><div class="result-row"><span>Olio</span><strong id="oil-total"></strong></div><div class="result-row soft-highlight"><span>Peso impasto stimato</span><strong id="estimated-dough-weight"></strong></div></section>
+          <section class="result-card blue"><div class="card-title"><span class="bubble"><svg class="i"><use href="#i-bag" /></svg></span>Starter</div><div class="result-row"><span>Farina</span><strong id="starter-flour"></strong></div><div class="result-row"><span>Acqua</span><strong id="starter-water"></strong></div></section>
+        </div>
+      </section>
+
+      <section class="shell timeline">
+        <div class="timeline-head">
+          <div>
+            <h2>Piano di lavorazione</h2>
+            <p class="timeline-subtitle">Crea una timeline progressiva per riposi, pieghe e fermentazione.</p>
+          </div>
+          <button class="secondary-button" id="restore-timeline">Ripristina preset</button>
+        </div>
+
+        <div class="timeline-grid">
+          <div class="timeline-panel">
+            <div class="timeline-presets" id="timeline-presets"></div>
+            <div class="steps" id="timeline-steps"></div>
+            <button class="soft-button" id="add-step">+ Aggiungi step</button>
+          </div>
+
+          <aside class="timeline-panel timer-card">
+            <div class="timer-label">Step attuale</div>
+            <div class="current-step" id="current-step">Pronta per partire</div>
+
+            <div class="timer-metrics">
+              <div class="timer-metric"><span>Tempo rimanente</span><strong id="remaining-time">0m 00s</strong></div>
+              <div class="timer-metric"><span>Prossimo step</span><strong id="next-step">Nessun prossimo step</strong></div>
+              <div class="timer-metric"><span>Timeline totale</span><strong id="total-time">0m 00s / 0m 00s</strong></div>
+            </div>
+
+            <div class="progress-head"><span>Avanzamento</span><span id="progress-percent">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+
+            <div class="timer-controls">
+              <button class="primary-button" id="start-pause">Avvia timeline</button>
+              <button class="secondary-button" id="skip-step" disabled>Salta step</button>
+              <button class="secondary-button wide" id="reset-timer">Reset</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="guides">
+        <div class="guide-title"><span style="color: var(--amber)"><svg class="i"><use href="#i-bulb" /></svg></span>Linee guida rapide</div>
+        <div class="guide-grid">
+          <article class="guide"><span class="guide-icon"><svg class="i"><use href="#i-drop" /></svg></span><div><h2>Idratazione</h2><p>Più idratazione = mollica più soffice ma impasto più delicato.</p></div></article>
+          <article class="guide"><span class="guide-icon"><svg class="i"><use href="#i-clock" /></svg></span><div><h2>Autolisi</h2><p>20-60 min migliorano estensibilità e sviluppo del glutine.</p></div></article>
+          <article class="guide"><span class="guide-icon"><svg class="i"><use href="#i-thermo" /></svg></span><div><h2>Temperatura impasto</h2><p>Mantieni l'impasto tra 24-26 °C per una fermentazione ottimale.</p></div></article>
+          <article class="guide"><span class="guide-icon"><svg class="i"><use href="#i-bowl" /></svg></span><div><h2>Sale</h2><p>Non superare 2,2% sulla farina per non rallentare la lievitazione.</p></div></article>
+          <article class="guide"><span class="guide-icon"><svg class="i"><use href="#i-calendar" /></svg></span><div><h2>Pianifica</h2><p>Fermentazioni lente in frigo migliorano aroma e digeribilità.</p></div></article>
+        </div>
+      </section>
+
+      <p class="footnote">Le quantità sono calcolate con arrotondamento al grammo.</p>
+    </main>
+
+    <script>
+      const doughProfiles = {
+        base: { hydration: 65, salt: 2, starter: 20, starterHydration: 100, oil: 0 },
+        high: { hydration: 80, salt: 2, starter: 20, starterHydration: 100, oil: 0 },
+        focaccia: { hydration: 75, salt: 2.2, starter: 15, starterHydration: 100, oil: 4 },
+      };
+
+      let flourValue = 1000;
+      let activeProfileId = 'base';
+      let customProfileName = 'Custom';
+      const unitFields = ['salt', 'starter', 'oil'];
+      const unitModes = { salt: '%', starter: '%', oil: '%' };
+      const gramValues = { salt: 20, starter: 200, oil: 0 };
+      const $ = (selector) => document.querySelector(selector);
+      const grams = (value) => `${Math.round(value)} g`;
+      const numberValue = (selector) => Math.max(Number($(selector).value) || 0, 0);
+      const toInputValue = (value) => {
+        const rounded = Math.round(Math.max(Number(value) || 0, 0) * 100) / 100;
+        return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+      };
+      const percentFromGrams = (gramsValue, flourTotal) => flourTotal > 0 ? Math.max(gramsValue, 0) / flourTotal * 100 : 0;
+      const gramsFromPercent = (percentage, flourTotal) => flourTotal * Math.max(percentage, 0) / 100;
+      const fieldSelector = (field) => `#${field}`;
+
+      function getFieldPercentage(field, flourTotal) {
+        if (unitModes[field] === 'g') {
+          return percentFromGrams(gramValues[field], flourTotal);
+        }
+        return numberValue(fieldSelector(field));
+      }
+
+      function refreshGramValuesFromPercentages() {
+        const flourTotal = numberValue('#base-value');
+        unitFields.forEach((field) => {
+          gramValues[field] = gramsFromPercent(numberValue(fieldSelector(field)), flourTotal);
+        });
+      }
+
+      function renderUnitToggles() {
+        document.querySelectorAll('.unit-toggle').forEach((toggle) => {
+          const field = toggle.dataset.field;
+          toggle.querySelectorAll('button').forEach((button) => {
+            button.classList.toggle('active', button.dataset.unit === unitModes[field]);
+            button.setAttribute('aria-pressed', String(button.dataset.unit === unitModes[field]));
+          });
+          const input = $(fieldSelector(field));
+          input.step = unitModes[field] === 'g' ? '1' : '0.1';
+        });
+      }
+
+      function setUnitMode(field, unit) {
+        if (unitModes[field] === unit) return;
+        const input = $(fieldSelector(field));
+        const flourTotal = numberValue('#base-value');
+
+        if (unit === 'g') {
+          gramValues[field] = gramsFromPercent(numberValue(fieldSelector(field)), flourTotal);
+          input.value = toInputValue(gramValues[field]);
+          unitModes[field] = 'g';
+        } else {
+          input.value = toInputValue(percentFromGrams(gramValues[field], flourTotal));
+          unitModes[field] = '%';
+        }
+
+        renderUnitToggles();
+        calculate();
+      }
+
+      function resetUnitModes() {
+        unitFields.forEach((field) => { unitModes[field] = '%'; });
+        renderUnitToggles();
+        refreshGramValuesFromPercentages();
+      }
+
+      function renderActiveProfile() {
+        document.querySelectorAll('.preset').forEach((item) => {
+          item.classList.toggle('active', item.dataset.profile === activeProfileId);
+        });
+        $('#custom-profile-card-name').textContent = customProfileName.trim() || 'Custom';
+        $('#custom-profile-name').value = customProfileName;
+      }
+
+      function setActiveProfile(profileId) {
+        activeProfileId = profileId;
+        renderActiveProfile();
+      }
+
+      function switchToCustom() {
+        if (activeProfileId !== 'custom') setActiveProfile('custom');
+      }
+
+      function calculate() {
+        const baseValue = numberValue('#base-value');
+        flourValue = baseValue;
+        unitFields.forEach((field) => {
+          if (unitModes[field] === 'g') {
+            gramValues[field] = numberValue(fieldSelector(field));
+          }
+        });
+        const hydration = numberValue('#hydration');
+        const saltPercentage = getFieldPercentage('salt', flourValue);
+        const starterPercentage = getFieldPercentage('starter', flourValue);
+        const starterHydration = numberValue('#starter-hydration');
+        const oilPercentage = getFieldPercentage('oil', flourValue);
+        const flourTotal = flourValue;
+        const waterTotal = flourTotal * hydration / 100;
+        const salt = flourTotal * saltPercentage / 100;
+        const oil = flourTotal * oilPercentage / 100;
+        const starter = flourTotal * starterPercentage / 100;
+        const starterFlour = starter / (1 + starterHydration / 100);
+        const starterWater = starter - starterFlour;
+        const flourToAdd = flourTotal;
+        const waterToAdd = waterTotal;
+        const estimatedDoughWeight = flourTotal + waterTotal + starter + salt + oil;
+        $('#salt-total').textContent = grams(salt);
+        $('#oil-total').textContent = grams(oil);
+        $('#starter-total').textContent = grams(starter);
+        $('#flour-add').textContent = grams(flourToAdd);
+        $('#water-add').textContent = grams(waterToAdd);
+        $('#estimated-dough-weight').textContent = grams(estimatedDoughWeight);
+        $('#starter-flour').textContent = grams(starterFlour);
+        $('#starter-water').textContent = grams(starterWater);
+      }
+
+      const timelinePresets = [
+        {
+          id: 'basic-same-day',
+          label: 'Pane base',
+          description: 'Riposo iniziale, pieghe e fermentazione in massa.',
+          steps: [
+            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 60 },
+            { id: 'fold-1', label: 'Stretch and fold', durationMinutes: 30 },
+            { id: 'fold-2', label: 'Stretch and fold', durationMinutes: 30 },
+            { id: 'fold-3', label: 'Stretch and fold', durationMinutes: 30 },
+            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 240 },
+          ],
+        },
+        {
+          id: 'high-hydration',
+          label: 'Alta idratazione',
+          description: 'Pieghe più ravvicinate per dare struttura all’impasto.',
+          steps: [
+            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 45 },
+            { id: 'coil-1', label: 'Coil fold', durationMinutes: 20 },
+            { id: 'coil-2', label: 'Coil fold', durationMinutes: 20 },
+            { id: 'coil-3', label: 'Coil fold', durationMinutes: 20 },
+            { id: 'coil-4', label: 'Coil fold', durationMinutes: 20 },
+            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 300 },
+          ],
+        },
+        {
+          id: 'focaccia',
+          label: 'Focaccia',
+          description: 'Timeline semplice per impasto morbido e lievitazione in teglia.',
+          steps: [
+            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 30 },
+            { id: 'fold-1', label: 'Prima piega', durationMinutes: 30 },
+            { id: 'fold-2', label: 'Seconda piega', durationMinutes: 30 },
+            { id: 'bulk', label: 'Prima lievitazione', durationMinutes: 120 },
+            { id: 'pan-proof', label: 'Lievitazione in teglia', durationMinutes: 90 },
+          ],
+        },
+        {
+          id: 'long-fermentation',
+          label: 'Lunga fermentazione',
+          description: 'Poche pieghe, poi maturazione lenta.',
+          steps: [
+            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 60 },
+            { id: 'fold-1', label: 'Prima piega', durationMinutes: 30 },
+            { id: 'fold-2', label: 'Seconda piega', durationMinutes: 30 },
+            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 180 },
+            { id: 'cold', label: 'Riposo in frigo', durationMinutes: 720 },
+          ],
+        },
+      ];
+
+      let selectedTimelinePreset = timelinePresets[0].id;
+      let timelineSteps = timelinePresets[0].steps.map((step) => ({ ...step }));
+      let timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
+      let timerInterval = null;
+      let draggedStepId = null;
+
+      const safeDuration = (durationMinutes) => Number.isFinite(durationMinutes) ? Math.max(0, durationMinutes) : 0;
+      const getTotalDurationMs = (steps) =>
+        steps.reduce((total, step) => total + safeDuration(step.durationMinutes) * 60 * 1000, 0);
+
+      function getElapsedMs() {
+        if (timer.startedAt === null) return 0;
+        const now = timer.status === 'paused' && timer.pausedAt !== null ? timer.pausedAt : Date.now();
+        return Math.max(0, now - timer.startedAt - timer.accumulatedPauseMs);
+      }
+
+      function getCurrentStepInfo(steps, elapsedMs) {
+        let accumulated = 0;
+        for (let index = 0; index < steps.length; index += 1) {
+          const stepDurationMs = safeDuration(steps[index].durationMinutes) * 60 * 1000;
+          const stepStartMs = accumulated;
+          const stepEndMs = accumulated + stepDurationMs;
+          if (elapsedMs < stepEndMs) {
+            return {
+              index,
+              step: steps[index],
+              stepStartMs,
+              stepEndMs,
+              elapsedInStepMs: elapsedMs - stepStartMs,
+              remainingInStepMs: stepEndMs - elapsedMs,
+            };
+          }
+          accumulated += stepDurationMs;
+        }
+        return null;
+      }
+
+      function formatDuration(ms) {
+        const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (hours > 0) {
+          return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+        }
+        return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+      }
+
+      function resetTimer() {
+        timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
+        stopTimerTick();
+        renderTimeline();
+      }
+
+      function stopTimerTick() {
+        if (timerInterval !== null) {
+          window.clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+
+      function startTimerTick() {
+        stopTimerTick();
+        timerInterval = window.setInterval(renderTimeline, 1000);
+      }
+
+      function renderTimelinePresets() {
+        $('#timeline-presets').innerHTML = timelinePresets.map((preset) => `
+          <button class="timeline-preset ${preset.id === selectedTimelinePreset ? 'active' : ''}" data-timeline-preset="${preset.id}">
+            <strong>${preset.label}</strong>
+            <span>${preset.description}</span>
+          </button>
+        `).join('');
+      }
+
+      function renderTimelineSteps() {
+        if (timelineSteps.length === 0) {
+          $('#timeline-steps').innerHTML = '<div class="empty-steps">Nessuno step nella timeline. Aggiungi uno step per avviare il timer.</div>';
+          return;
+        }
+
+        $('#timeline-steps').innerHTML = timelineSteps.map((step, index) => `
+          <div class="step-row ${step.id === draggedStepId ? 'dragging' : ''}" data-step-id="${step.id}">
+            <div class="step-order">
+              <button class="drag-handle" data-drag-handle type="button" aria-label="Sposta ${step.label.replaceAll('"', '&quot;')}">
+                <svg viewBox="0 0 18 18" aria-hidden="true">
+                  <path d="M6 4h.1M12 4h.1M6 9h.1M12 9h.1M6 14h.1M12 14h.1" />
+                </svg>
+              </button>
+              <span class="step-number">${index + 1}</span>
+            </div>
+            <label class="step-field compact">
+              <span class="visually-hidden">Step</span>
+              <input class="step-label" type="text" value="${step.label.replaceAll('"', '&quot;')}" />
+            </label>
+            <label class="step-field compact">
+              <span class="visually-hidden">Minuti</span>
+              <input class="step-duration" type="number" min="0" step="1" value="${safeDuration(step.durationMinutes)}" />
+            </label>
+            <button class="delete-step" aria-label="Elimina ${step.label.replaceAll('"', '&quot;')}">×</button>
+          </div>
+        `).join('');
+      }
+
+      function renderTimeline() {
+        const totalDurationMs = getTotalDurationMs(timelineSteps);
+        const elapsedMs = Math.min(getElapsedMs(), totalDurationMs);
+        const current = getCurrentStepInfo(timelineSteps, elapsedMs);
+        const progress = totalDurationMs > 0 ? Math.min(100, Math.round((elapsedMs / totalDurationMs) * 100)) : 0;
+        const nextStep = current ? timelineSteps[current.index + 1] : null;
+
+        if (timer.status === 'running' && totalDurationMs > 0 && getElapsedMs() >= totalDurationMs) {
+          timer.status = 'finished';
+          timer.pausedAt = null;
+          stopTimerTick();
+        }
+
+        $('#current-step').textContent = timer.status === 'finished'
+          ? 'Timeline completata'
+          : current?.step.label || 'Pronta per partire';
+        $('#remaining-time').textContent = formatDuration(current?.remainingInStepMs || 0);
+        $('#next-step').textContent = nextStep?.label || 'Nessun prossimo step';
+        $('#total-time').textContent = `${formatDuration(elapsedMs)} / ${formatDuration(totalDurationMs)}`;
+        $('#progress-percent').textContent = `${progress}%`;
+        $('#progress-fill').style.width = `${progress}%`;
+
+        const canStart = timelineSteps.length > 0 && totalDurationMs > 0;
+        const startPause = $('#start-pause');
+        startPause.disabled = !canStart && timer.status !== 'running' && timer.status !== 'paused';
+        startPause.textContent = timer.status === 'running'
+          ? 'Pausa'
+          : timer.status === 'paused'
+            ? 'Riprendi'
+            : 'Avvia timeline';
+        $('#skip-step').disabled = !current || timer.status === 'idle' || timer.status === 'finished';
+      }
+
+      function renderTimelineAll() {
+        renderTimelinePresets();
+        renderTimelineSteps();
+        renderTimeline();
+      }
+
+      function moveTimelineStep(fromStepId, toStepId) {
+        const fromIndex = timelineSteps.findIndex((step) => step.id === fromStepId);
+        const toIndex = timelineSteps.findIndex((step) => step.id === toStepId);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+        const nextSteps = [...timelineSteps];
+        const movedSteps = nextSteps.splice(fromIndex, 1);
+        if (!movedSteps[0]) return;
+        nextSteps.splice(toIndex, 0, movedSteps[0]);
+        timelineSteps = nextSteps;
+        renderTimelineAll();
+      }
+
+      $('#timeline-presets').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-timeline-preset]');
+        if (!button) return;
+        const preset = timelinePresets.find((item) => item.id === button.dataset.timelinePreset) || timelinePresets[0];
+        selectedTimelinePreset = preset.id;
+        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        resetTimer();
+        renderTimelineAll();
+      });
+
+      $('#timeline-steps').addEventListener('input', (event) => {
+        const row = event.target.closest('[data-step-id]');
+        if (!row) return;
+        const step = timelineSteps.find((item) => item.id === row.dataset.stepId);
+        if (!step) return;
+        if (event.target.classList.contains('step-label')) step.label = event.target.value;
+        if (event.target.classList.contains('step-duration')) step.durationMinutes = Math.max(Number(event.target.value) || 0, 0);
+        resetTimer();
+        renderTimeline();
+      });
+
+      $('#timeline-steps').addEventListener('click', (event) => {
+        const button = event.target.closest('.delete-step');
+        if (!button) return;
+        const row = button.closest('[data-step-id]');
+        timelineSteps = timelineSteps.filter((step) => step.id !== row.dataset.stepId);
+        resetTimer();
+        renderTimelineAll();
+      });
+
+      $('#timeline-steps').addEventListener('pointerdown', (event) => {
+        const handle = event.target.closest('[data-drag-handle]');
+        if (!handle) return;
+        const row = handle.closest('[data-step-id]');
+        if (!row) return;
+        event.preventDefault();
+        draggedStepId = row.dataset.stepId;
+        handle.setPointerCapture(event.pointerId);
+        renderTimelineSteps();
+      });
+
+      window.addEventListener('pointermove', (event) => {
+        if (!draggedStepId) return;
+        event.preventDefault();
+        const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-step-id]');
+        const targetStepId = targetRow?.dataset.stepId;
+        if (!targetStepId || targetStepId === draggedStepId) return;
+        moveTimelineStep(draggedStepId, targetStepId);
+      }, { passive: false });
+
+      function finishStepDrag() {
+        if (!draggedStepId) return;
+        draggedStepId = null;
+        renderTimelineSteps();
+      }
+
+      window.addEventListener('pointerup', finishStepDrag);
+      window.addEventListener('pointercancel', finishStepDrag);
+
+      $('#add-step').addEventListener('click', () => {
+        timelineSteps.push({ id: `custom-${Date.now()}`, label: 'Nuovo step', durationMinutes: 30 });
+        resetTimer();
+        renderTimelineAll();
+      });
+
+      $('#restore-timeline').addEventListener('click', () => {
+        const preset = timelinePresets.find((item) => item.id === selectedTimelinePreset) || timelinePresets[0];
+        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        resetTimer();
+        renderTimelineAll();
+      });
+
+      $('#start-pause').addEventListener('click', () => {
+        if (timer.status === 'running') {
+          timer.status = 'paused';
+          timer.pausedAt = Date.now();
+          stopTimerTick();
+        } else if (timer.status === 'paused') {
+          timer.accumulatedPauseMs += Date.now() - timer.pausedAt;
+          timer.pausedAt = null;
+          timer.status = 'running';
+          startTimerTick();
+        } else if (getTotalDurationMs(timelineSteps) > 0) {
+          timer = { status: 'running', startedAt: Date.now(), pausedAt: null, accumulatedPauseMs: 0 };
+          startTimerTick();
+        }
+        renderTimeline();
+      });
+
+      $('#skip-step').addEventListener('click', () => {
+        const totalDurationMs = getTotalDurationMs(timelineSteps);
+        const current = getCurrentStepInfo(timelineSteps, Math.min(getElapsedMs(), totalDurationMs));
+        if (!current || timer.startedAt === null) return;
+        const targetElapsed = Math.min(current.stepEndMs, totalDurationMs);
+        const baseNow = timer.status === 'paused' && timer.pausedAt !== null ? timer.pausedAt : Date.now();
+        timer.startedAt = baseNow - targetElapsed - timer.accumulatedPauseMs;
+        timer.pausedAt = timer.status === 'paused' ? baseNow : null;
+        if (targetElapsed >= totalDurationMs) {
+          timer.status = 'finished';
+          stopTimerTick();
+        }
+        renderTimeline();
+      });
+
+      $('#reset-timer').addEventListener('click', resetTimer);
+
+      document.querySelectorAll('.form input').forEach((input) => {
+        input.addEventListener('input', () => {
+          switchToCustom();
+          calculate();
+        });
+      });
+
+      document.querySelectorAll('.unit-toggle button').forEach((button) => {
+        button.addEventListener('click', () => {
+          const field = button.closest('.unit-toggle').dataset.field;
+          setUnitMode(field, button.dataset.unit);
+        });
+      });
+
+      document.querySelectorAll('.preset').forEach((button) => {
+        const selectProfileFromCard = (event) => {
+          if (event.target.closest('.custom-name-input')) return;
+          if (event.target.closest('.unit-toggle')) return;
+          const profileId = button.dataset.profile;
+          setActiveProfile(profileId);
+          if (profileId === 'custom') {
+            renderActiveProfile();
+            calculate();
+            return;
+          }
+          const profile = doughProfiles[profileId];
+          customProfileName = 'Custom';
+          renderActiveProfile();
+          $('#hydration').value = profile.hydration;
+          $('#salt').value = profile.salt;
+          $('#starter').value = profile.starter;
+          $('#starter-hydration').value = profile.starterHydration;
+          $('#oil').value = profile.oil;
+          resetUnitModes();
+          calculate();
+        };
+
+        button.addEventListener('click', selectProfileFromCard);
+        button.addEventListener('keydown', (event) => {
+          if (event.target.closest('.custom-name-input')) return;
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          selectProfileFromCard(event);
+        });
+      });
+
+      $('#custom-profile-name').addEventListener('input', (event) => {
+        customProfileName = event.target.value;
+        renderActiveProfile();
+      });
+
+      $('#reset').addEventListener('click', () => {
+        flourValue = 1000;
+        activeProfileId = 'base';
+        customProfileName = 'Custom';
+        $('#base-label').textContent = 'Farina';
+        $('#base-value').value = 1000;
+        $('#hydration').value = 65;
+        $('#salt').value = 2;
+        $('#starter').value = 20;
+        $('#starter-hydration').value = 100;
+        $('#oil').value = 0;
+        resetUnitModes();
+        renderActiveProfile();
+        calculate();
+      });
+
+      renderActiveProfile();
+      renderUnitToggles();
+      refreshGramValuesFromPercentages();
+      calculate();
+      renderTimelineAll();
+    </script>
   </body>
 </html>

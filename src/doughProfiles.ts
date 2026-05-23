@@ -1,19 +1,20 @@
-import type { BreadInputs } from './calculations';
+import type { FormulaPercentages } from './calculations';
+
+export type DoughProfileSource = 'system' | 'user';
 
 export type DoughProfile = {
-  id: 'base' | 'high' | 'focaccia';
+  id: string;
+  source: DoughProfileSource;
   label: string;
   description: string;
-  values: Pick<
-    BreadInputs,
-    'hydration' | 'saltPercentage' | 'starterPercentage' | 'starterHydration' | 'oilPercentage'
-  >;
+  values: FormulaPercentages;
   recommendedTimelinePresetId?: string;
 };
 
 export const doughProfiles: DoughProfile[] = [
   {
     id: 'base',
+    source: 'system',
     label: 'Pane base',
     description: 'Equilibrato, senza grassi aggiunti.',
     values: {
@@ -27,6 +28,7 @@ export const doughProfiles: DoughProfile[] = [
   },
   {
     id: 'high',
+    source: 'system',
     label: 'Alta idratazione',
     description: 'Più acqua, impasto più delicato.',
     values: {
@@ -40,6 +42,7 @@ export const doughProfiles: DoughProfile[] = [
   },
   {
     id: 'focaccia',
+    source: 'system',
     label: 'Focaccia',
     description: 'Impasto morbido, con olio.',
     values: {
