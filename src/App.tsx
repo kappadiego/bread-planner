@@ -12,8 +12,10 @@ import {
 import type { ComponentType, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { calculateBread, type BreadInputs, roundGram } from './calculations';
+import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
+import { calculateFlourBreakdown, getFlourProfile, type FlourBreakdownRow, type FlourMix } from './flours';
 
 type IconProps = {
   size?: number;
@@ -57,6 +59,19 @@ const initialUnitModes: UnitModes = {
   oilPercentage: '%',
 };
 
+const initialFlourMix: FlourMix = {
+  id: 'current-flour-mix',
+  name: 'Farine formula',
+  mode: 'single',
+  items: [
+    {
+      id: 'flour-1',
+      flourProfileId: '0-bread',
+      percentage: 100,
+    },
+  ],
+};
+
 const safeNumber = (value: number) => (Number.isFinite(value) ? Math.max(value, 0) : 0);
 
 const percentFromGrams = (grams: number, flourTotal: number) => {
@@ -97,12 +112,17 @@ function App() {
   const [gramValues, setGramValues] = useState<GramValues>(() => getGramValues(initialInputs));
   const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>('base');
   const [customProfileName, setCustomProfileName] = useState('Custom');
+  const [flourMix, setFlourMix] = useState<FlourMix>(initialFlourMix);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
     [inputs, unitModes, gramValues],
   );
   const results = useMemo(() => calculateBread(effectiveInputs), [effectiveInputs]);
+  const flourBreakdown = useMemo(
+    () => calculateFlourBreakdown(effectiveInputs.flourTotal, flourMix),
+    [effectiveInputs.flourTotal, flourMix],
+  );
 
   const updateInput = (field: keyof BreadInputs, value: number) => {
     const safeValue = safeNumber(value);
@@ -154,6 +174,7 @@ function App() {
     setInputs(initialInputs);
     setUnitModes(initialUnitModes);
     setGramValues(getGramValues(initialInputs));
+    setFlourMix(initialFlourMix);
     setActiveProfileId('base');
     setCustomProfileName('Custom');
   };
@@ -168,6 +189,11 @@ function App() {
   };
 
   const selectCustomProfile = () => {
+    setActiveProfileId('custom');
+  };
+
+  const updateFlourMix = (nextFlourMix: FlourMix) => {
+    setFlourMix(nextFlourMix);
     setActiveProfileId('custom');
   };
 
@@ -202,6 +228,13 @@ function App() {
                 onCustomProfileNameChange={setCustomProfileName}
               />
 
+              <FlourTotalForm
+                flourTotal={effectiveInputs.flourTotal}
+                flourMix={flourMix}
+                onChange={(value) => updateInput('flourTotal', value)}
+                onFlourMixChange={updateFlourMix}
+              />
+
               <CalculatorForm
                 inputs={effectiveInputs}
                 unitModes={unitModes}
@@ -214,7 +247,7 @@ function App() {
           </div>
 
           <div className="grid gap-5">
-            <ResultCards results={results} />
+            <ResultCards results={results} flourBreakdown={flourBreakdown} />
             {results.hasNegativeAdditions && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
                 Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
@@ -386,13 +419,6 @@ function CalculatorForm({
 }) {
   const fields: FieldConfig[] = [
     {
-      field: 'flourTotal',
-      label: 'Farina',
-      unit: 'g',
-      value: inputs.flourTotal,
-      icon: Wheat,
-    },
-    {
       field: 'hydration',
       label: 'Idratazione',
       unit: '%',
@@ -452,6 +478,55 @@ function CalculatorForm({
           onUnitChange={field.convertibleField ? (unit) => onUnitChange(field.convertibleField!, unit) : undefined}
         />
       ))}
+    </form>
+  );
+}
+
+function FlourTotalForm({
+  flourTotal,
+  flourMix,
+  onChange,
+  onFlourMixChange,
+}: {
+  flourTotal: number;
+  flourMix: FlourMix;
+  onChange: (value: number) => void;
+  onFlourMixChange: (flourMix: FlourMix) => void;
+}) {
+  const [isFlourPanelOpen, setIsFlourPanelOpen] = useState(false);
+  const firstFlourProfile = getFlourProfile(flourMix.items[0]?.flourProfileId ?? '0-bread');
+  const flourPrompt = flourMix.mode === 'mix'
+    ? 'Hai configurato un mix farine. Vuoi modificarlo?'
+    : `La farina base è impostata su ${firstFlourProfile.label}. Vuoi modificare o creare un mix?`;
+
+  return (
+    <form className="mt-6 rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+      <NumberField
+        label="Farina"
+        unit="g"
+        value={flourTotal}
+        icon={Wheat}
+        onChange={onChange}
+      />
+      {isFlourPanelOpen ? (
+        <FlourMixEditor
+          flourTotal={flourTotal}
+          flourMix={flourMix}
+          onChange={onFlourMixChange}
+          onClose={() => setIsFlourPanelOpen(false)}
+        />
+      ) : (
+        <div className="px-4 py-4">
+          <p className="text-sm leading-5 text-stone-700">{flourPrompt}</p>
+          <button
+            type="button"
+            onClick={() => setIsFlourPanelOpen(true)}
+            className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+          >
+            Clicca qui
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -521,7 +596,13 @@ function NumberField({
   );
 }
 
-function ResultCards({ results }: { results: ReturnType<typeof calculateBread> }) {
+function ResultCards({
+  results,
+  flourBreakdown,
+}: {
+  results: ReturnType<typeof calculateBread>;
+  flourBreakdown: FlourBreakdownRow[];
+}) {
   return (
     <>
       <section className="rounded-[12px] border border-stone-200 bg-white p-6 shadow-air ring-1 ring-black/[0.02] border-l-[5px] border-l-proof-600">
@@ -550,6 +631,26 @@ function ResultCards({ results }: { results: ReturnType<typeof calculateBread> }
           ['Acqua', results.starterWater],
         ]}
       />
+
+      <section className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-amber-600 bg-white p-6 shadow-air ring-1 ring-black/[0.02]">
+        <div className="mb-5 flex items-center gap-4 text-[24px] font-semibold text-ink">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-amber-50 text-amber-700">
+            <Wheat size={28} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          Composizione farine
+        </div>
+        <div className="divide-y divide-stone-200">
+          {flourBreakdown.map((row) => (
+            <div key={row.id} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-baseline sm:gap-4">
+              <span className="min-w-0 text-[18px] font-semibold text-stone-700">{row.label}</span>
+              <span className="text-[20px] font-semibold text-ink">
+                {formatPercent(row.percentage)}% · {formatGram(row.grams)}
+              </span>
+              <span className="text-sm leading-5 text-stone-500 sm:col-span-2">{row.description}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </>
   );
 }
@@ -846,6 +947,11 @@ function BulbIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': aria
 
 function formatGram(value: number) {
   return `${roundGram(value)} g`;
+}
+
+function formatPercent(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 export default App;

@@ -249,6 +249,194 @@
         display: none;
       }
 
+      .flour-mix {
+        background: #fff;
+        padding: 16px;
+      }
+
+      .flour-mix-head {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .flour-mix-head[hidden] {
+        display: none;
+      }
+
+      .flour-mix-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .flour-mix-title + p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .flour-mode {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #f8f7f5;
+        padding: 4px;
+      }
+
+      .flour-mode button,
+      .flour-add,
+      .flour-remove {
+        min-height: 40px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #6f6860;
+        font-weight: 700;
+      }
+
+      .flour-mode button.active {
+        background: #fff;
+        color: var(--amber);
+        box-shadow: 0 0 0 1px rgba(222, 217, 208, .95), 0 1px 2px rgba(31,37,34,.08);
+      }
+
+      .flour-mix-body {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .flour-single,
+      .flour-row,
+      .flour-hints {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8f7f5;
+        padding: 12px;
+      }
+
+      .flour-control {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+        color: #5d5750;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .flour-control select,
+      .flour-control input {
+        min-width: 0;
+        min-height: 44px;
+        width: 100%;
+        border: 1px solid #cfc8bd;
+        border-radius: 9px;
+        background: #fff;
+        padding: 0 12px;
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 600;
+        outline: none;
+      }
+
+      .flour-single-note,
+      .flour-hints {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .flour-row {
+        display: grid;
+        gap: 12px;
+      }
+
+      .flour-grams {
+        display: grid;
+        min-height: 44px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 750;
+      }
+
+      .flour-add {
+        border: 1px solid #e8c88d;
+        background: var(--amber-soft);
+        color: var(--amber);
+        padding: 0 14px;
+      }
+
+      .flour-remove {
+        border: 1px solid var(--line);
+        background: #fff;
+        padding: 0 14px;
+      }
+
+      .flour-remove:disabled {
+        cursor: not-allowed;
+        opacity: .45;
+      }
+
+      .flour-status {
+        border-radius: 9px;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .flour-status.ok {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .flour-status.warn {
+        background: var(--amber-soft);
+        color: #7a4a00;
+      }
+
+      .flour-closed {
+        display: grid;
+        gap: 12px;
+      }
+
+      .flour-closed p {
+        margin: 0;
+        color: #4f4a44;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .flour-open {
+        min-height: 40px;
+        border: 1px solid #e8c88d;
+        border-radius: 8px;
+        background: var(--amber-soft);
+        color: var(--amber);
+        padding: 0 14px;
+        font-weight: 700;
+      }
+
+      .flour-close {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: #6f6860;
+        padding: 0 12px;
+        font-weight: 700;
+      }
+
       .form {
         margin-top: 24px;
         overflow: hidden;
@@ -265,6 +453,10 @@
       }
 
       .field:last-child { border-bottom: 0; }
+
+      .flour-total-form .field {
+        border-bottom: 0;
+      }
 
       .field-label {
         display: flex;
@@ -303,7 +495,8 @@
         font-size: 16px;
       }
 
-      .unit-toggle {
+      .unit-toggle,
+      .flour-unit-toggle {
         display: flex;
         align-items: center;
         gap: 4px;
@@ -312,7 +505,8 @@
         padding: 4px;
       }
 
-      .unit-toggle button {
+      .unit-toggle button,
+      .flour-unit-toggle button {
         display: grid;
         min-width: 36px;
         height: 36px;
@@ -325,7 +519,8 @@
         font-weight: 700;
       }
 
-      .unit-toggle button.active {
+      .unit-toggle button.active,
+      .flour-unit-toggle button.active {
         background: #fff;
         color: var(--amber);
         box-shadow: 0 0 0 1px rgba(222, 217, 208, .95), 0 1px 2px rgba(31,37,34,.08);
@@ -774,6 +969,10 @@
         .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .field { grid-template-columns: 1fr 260px; align-items: center; }
+        .flour-mix-head { flex-direction: row; align-items: start; justify-content: space-between; }
+        .flour-mode { min-width: 250px; }
+        .flour-row { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+        .flour-remove { grid-column: span 2; }
         .timeline-head { flex-direction: row; align-items: end; justify-content: space-between; }
         .timeline-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .step-row { grid-template-columns: 76px minmax(0, 1fr) 130px 44px; align-items: end; }
@@ -846,8 +1045,24 @@
               </div>
             </section>
 
-            <form class="form">
+            <form class="form flour-total-form">
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-wheat" /></svg><span id="base-label">Farina</span></span><span class="input-wrap"><input id="base-value" type="number" min="0" value="1000" /><span class="unit">g</span></span></label>
+              <section class="flour-mix" id="flour-mix-editor" aria-labelledby="flour-mix-title">
+                <div class="flour-mix-head" hidden>
+                  <div>
+                    <div class="flour-mix-title" id="flour-mix-title"><svg class="i"><use href="#i-wheat" /></svg>Farine</div>
+                    <p>Scomponi la farina totale senza cambiare la formula principale.</p>
+                  </div>
+                  <div class="flour-mode" aria-label="Modalità farine">
+                    <button type="button" data-flour-mode="single">Una farina</button>
+                    <button type="button" data-flour-mode="mix">Mix farine</button>
+                  </div>
+                </div>
+                <div class="flour-mix-body" id="flour-mix-body"></div>
+              </section>
+            </form>
+
+            <form class="form">
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-drop" /></svg>Idratazione</span><span class="input-wrap"><input id="hydration" type="number" min="0" step="0.1" value="65" /><span class="unit">%</span></span></label>
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-salt" /></svg>Sale</span><span class="input-wrap"><input id="salt" type="number" min="0" step="0.1" value="2" /><span class="unit-toggle" data-field="salt"><button type="button" data-unit="%">%</button><button type="button" data-unit="g">g</button></span></span></label>
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-jar" /></svg>Starter</span><span class="input-wrap"><input id="starter" type="number" min="0" step="0.1" value="20" /><span class="unit-toggle" data-field="starter"><button type="button" data-unit="%">%</button><button type="button" data-unit="g">g</button></span></span></label>
@@ -860,6 +1075,7 @@
         <div class="results">
           <section class="result-card green"><div class="card-title"><span class="bubble"><svg class="i"><use href="#i-bowl" /></svg></span>Ingredienti</div><div class="result-row"><span>Farina</span><strong id="flour-add"></strong></div><div class="result-row"><span>Acqua</span><strong id="water-add"></strong></div><div class="result-row"><span>Starter</span><strong id="starter-total"></strong></div><div class="result-row"><span>Sale</span><strong id="salt-total"></strong></div><div class="result-row"><span>Olio</span><strong id="oil-total"></strong></div><div class="result-row soft-highlight"><span>Peso impasto stimato</span><strong id="estimated-dough-weight"></strong></div></section>
           <section class="result-card blue"><div class="card-title"><span class="bubble"><svg class="i"><use href="#i-bag" /></svg></span>Starter</div><div class="result-row"><span>Farina</span><strong id="starter-flour"></strong></div><div class="result-row"><span>Acqua</span><strong id="starter-water"></strong></div></section>
+          <section class="result-card amber"><div class="card-title"><span class="bubble"><svg class="i"><use href="#i-wheat" /></svg></span>Composizione farine</div><div id="flour-breakdown"></div></section>
         </div>
       </section>
 
@@ -922,9 +1138,29 @@
         focaccia: { hydration: 75, salt: 2.2, starter: 15, starterHydration: 100, oil: 4 },
       };
 
+      const flourProfiles = [
+        { id: '00-weak', label: 'Tipo 0 / 00', description: 'Assorbimento medio-basso, adatta a impasti base e lavorazioni semplici.', absorptionLevel: 'low', strengthLevel: 'low', glutenBehavior: 'weak' },
+        { id: '0-bread', label: '0 / pane', description: 'Farina versatile per pane quotidiano e lievitazioni medie.', absorptionLevel: 'medium', strengthLevel: 'medium', glutenBehavior: 'balanced' },
+        { id: 'type-1', label: 'Tipo 1', description: 'Farina semi-integrale con buon assorbimento e aroma più presente.', absorptionLevel: 'high', strengthLevel: 'medium', glutenBehavior: 'balanced' },
+        { id: 'type-2', label: 'Tipo 2', description: 'Farina rustica, più ricca di crusca e adatta a impasti saporiti.', absorptionLevel: 'high', strengthLevel: 'medium', glutenBehavior: 'balanced' },
+        { id: 'whole-wheat', label: 'Integrale', description: 'Farina completa con alto assorbimento e struttura più delicata.', absorptionLevel: 'very-high', strengthLevel: 'medium', glutenBehavior: 'balanced' },
+        { id: 'manitoba', label: 'Manitoba', description: 'Farina forte per rinforzare impasti lunghi o molto idratati.', absorptionLevel: 'high', strengthLevel: 'very-high', glutenBehavior: 'tenacious' },
+        { id: 'semola', label: 'Semola rimacinata', description: 'Farina di grano duro, tenace e profumata.', absorptionLevel: 'high', strengthLevel: 'special', glutenBehavior: 'tenacious' },
+        { id: 'custom', label: 'Farina custom', description: 'Profilo libero per farine non ancora classificate.', absorptionLevel: 'medium', strengthLevel: 'medium', glutenBehavior: 'balanced' },
+      ];
+
       let flourValue = 1000;
       let activeProfileId = 'base';
       let customProfileName = 'Custom';
+      let flourMix = {
+        id: 'current-flour-mix',
+        name: 'Farine formula',
+        mode: 'single',
+        items: [{ id: 'flour-1', flourProfileId: '0-bread', percentage: 100 }],
+      };
+      let flourMixOpen = false;
+      const flourUnitModes = {};
+      const flourGramValues = {};
       const unitFields = ['salt', 'starter', 'oil'];
       const unitModes = { salt: '%', starter: '%', oil: '%' };
       const gramValues = { salt: 20, starter: 200, oil: 0 };
@@ -938,6 +1174,194 @@
       const percentFromGrams = (gramsValue, flourTotal) => flourTotal > 0 ? Math.max(gramsValue, 0) / flourTotal * 100 : 0;
       const gramsFromPercent = (percentage, flourTotal) => flourTotal * Math.max(percentage, 0) / 100;
       const fieldSelector = (field) => `#${field}`;
+      const flourProfileOptions = () => flourProfiles.map((profile) => `<option value="${profile.id}">${profile.label}</option>`).join('');
+      const flourProfile = (profileId) => flourProfiles.find((profile) => profile.id === profileId) || flourProfiles[0];
+      const flourItemUnitMode = (itemId) => flourUnitModes[itemId] || '%';
+      const flourItemGramValue = (item) => flourGramValues[item.id] ?? gramsFromPercent(item.percentage, flourValue);
+      const percentLabel = (value) => {
+        const rounded = Math.round((Number(value) || 0) * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+      };
+      const getFlourMixTotalPercentage = () => flourMix.items.reduce((total, item) => total + Math.max(Number(item.percentage) || 0, 0), 0);
+      const isFlourMixValid = () => {
+        const total = getFlourMixTotalPercentage();
+        return flourMix.items.length > 0 && flourMix.items.every((item) => Number.isFinite(Number(item.percentage)) && Number(item.percentage) >= 0) && total >= 99.9 && total <= 100.1;
+      };
+      const calculateFlourBreakdown = () => flourMix.items.map((item) => {
+        const profile = flourProfile(item.flourProfileId);
+        const percentage = Math.max(Number(item.percentage) || 0, 0);
+        return {
+          id: item.id,
+          label: profile.label,
+          description: profile.description,
+          percentage,
+          grams: flourValue * percentage / 100,
+          proteinPercentage: item.proteinPercentage,
+        };
+      });
+      const weightedProteinPercentage = () => {
+        const positiveItems = flourMix.items.filter((item) => Math.max(Number(item.percentage) || 0, 0) > 0);
+        const withProtein = positiveItems.filter((item) => Number.isFinite(Number(item.proteinPercentage)));
+        if (positiveItems.length === 0 || withProtein.length !== positiveItems.length) return undefined;
+        const total = withProtein.reduce((sum, item) => sum + Math.max(Number(item.percentage) || 0, 0), 0);
+        if (total === 0) return undefined;
+        return withProtein.reduce((sum, item) => sum + Math.max(Number(item.percentage) || 0, 0) * Math.max(Number(item.proteinPercentage) || 0, 0), 0) / total;
+      };
+      const flourMixHints = () => {
+        const profiles = flourMix.items.map((item) => flourProfile(item.flourProfileId));
+        const hints = new Set();
+        if (profiles.some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high')) hints.add('Alcune farine del mix possono assorbire più acqua.');
+        if (profiles.some((profile) => profile.strengthLevel === 'very-high')) hints.add('La presenza di farina forte può aiutare impasti lunghi o strutturati.');
+        if (profiles.some((profile) => profile.glutenBehavior === 'different')) hints.add('Alcune farine hanno un comportamento diverso dal grano tenero.');
+        return Array.from(hints);
+      };
+
+      function renderFlourBreakdown() {
+        $('#flour-breakdown').innerHTML = calculateFlourBreakdown().map((row) => `
+          <div class="result-row">
+            <span>${row.label}<br><small style="color: var(--muted); font-weight: 500;">${row.description}</small></span>
+            <strong>${percentLabel(row.percentage)}% · ${grams(row.grams)}</strong>
+          </div>
+        `).join('');
+      }
+
+      function renderFlourMixStatus() {
+        const total = getFlourMixTotalPercentage();
+        const valid = isFlourMixValid();
+        const protein = weightedProteinPercentage();
+        const hints = flourMixHints();
+        const status = $('#flour-mix-status');
+        if (status) {
+          status.className = `flour-status ${valid ? 'ok' : 'warn'}`;
+          status.textContent = valid ? `Mix completo: ${percentLabel(total)}%.` : `Il mix deve arrivare al 100%. Ora sei a ${percentLabel(total)}%.`;
+        }
+        const hintsBox = $('#flour-hints');
+        if (hintsBox) {
+          const proteinText = protein ? `<p>Proteine medie stimate: ${percentLabel(protein)}%.</p>` : '';
+          hintsBox.innerHTML = `${proteinText}${hints.map((hint) => `<p>${hint}</p>`).join('')}`;
+          hintsBox.hidden = !protein && hints.length === 0;
+        }
+        const singleNote = $('#single-flour-note');
+        if (singleNote) {
+          singleNote.textContent = flourProfile(flourMix.items[0]?.flourProfileId).description;
+        }
+      }
+
+      function syncFlourMixFromDom() {
+        if (flourMix.mode === 'single') {
+          const singleSelect = $('#single-flour-profile');
+          if (singleSelect) {
+            flourMix.items = [{ ...flourMix.items[0], flourProfileId: singleSelect.value, percentage: 100 }];
+          }
+          return;
+        }
+
+        flourMix.items = flourMix.items.map((item) => {
+          const row = $(`[data-flour-row="${item.id}"]`);
+          if (!row) return item;
+          const proteinValue = row.querySelector('[data-flour-protein]').value;
+          const amountValue = Math.max(Number(row.querySelector('[data-flour-amount]').value) || 0, 0);
+          const unitMode = flourItemUnitMode(item.id);
+          if (unitMode === 'g') {
+            flourGramValues[item.id] = amountValue;
+          }
+          return {
+            ...item,
+            flourProfileId: row.querySelector('[data-flour-profile]').value,
+            percentage: unitMode === 'g' ? percentFromGrams(amountValue, flourValue) : amountValue,
+            proteinPercentage: proteinValue === '' ? undefined : Math.max(Number(proteinValue) || 0, 0),
+          };
+        });
+      }
+
+      function refreshFlourMixComputed(readDom = true) {
+        if (readDom) syncFlourMixFromDom();
+        calculateFlourBreakdown().forEach((row) => {
+          const gramsNode = $(`[data-flour-grams="${row.id}"]`);
+          if (gramsNode) gramsNode.textContent = grams(row.grams);
+          const amountNode = $(`[data-flour-amount="${row.id}"]`);
+          if (amountNode && flourItemUnitMode(row.id) === 'g') {
+            amountNode.value = toInputValue(flourItemGramValue(flourMix.items.find((item) => item.id === row.id) || { id: row.id, percentage: row.percentage }));
+          }
+        });
+        renderFlourMixStatus();
+        renderFlourBreakdown();
+      }
+
+      function renderFlourMixEditor() {
+        document.querySelectorAll('[data-flour-mode]').forEach((button) => {
+          button.classList.toggle('active', button.dataset.flourMode === flourMix.mode);
+          button.setAttribute('aria-pressed', String(button.dataset.flourMode === flourMix.mode));
+        });
+        $('.flour-mix-head').hidden = !flourMixOpen;
+
+        if (!flourMixOpen) {
+          const profile = flourProfile(flourMix.items[0]?.flourProfileId);
+          $('#flour-mix-body').innerHTML = `
+            <div class="flour-closed">
+              <p>La farina base è impostata su <strong>${profile.label}</strong>. Vuoi modificare o creare un mix?</p>
+              <button type="button" class="flour-open" data-open-flour-mix>Clicca qui</button>
+            </div>
+          `;
+          renderFlourBreakdown();
+          return;
+        }
+
+        if (flourMix.mode === 'single') {
+          const item = flourMix.items[0] || { id: 'flour-1', flourProfileId: '0-bread', percentage: 100 };
+          $('#flour-mix-body').innerHTML = `
+            <div class="flour-single">
+              <label class="flour-control">Tipo farina
+                <select id="single-flour-profile">${flourProfileOptions()}</select>
+              </label>
+              <p class="flour-single-note" id="single-flour-note"></p>
+              <button type="button" class="flour-add" data-create-mix>+ Crea un mix</button>
+              <button type="button" class="flour-close" data-close-flour-mix>Chiudi</button>
+            </div>
+          `;
+          $('#single-flour-profile').value = item.flourProfileId;
+        } else {
+          $('#flour-mix-body').innerHTML = `
+            ${flourMix.items.map((item, index) => `
+              <div class="flour-row" data-flour-row="${item.id}">
+                <label class="flour-control">Farina ${index + 1}
+                  <select data-flour-profile>${flourProfileOptions()}</select>
+                </label>
+                <label class="flour-control">Quantità
+                  <span class="input-wrap">
+                    <input data-flour-amount="${item.id}" type="number" min="0" step="${flourItemUnitMode(item.id) === 'g' ? '1' : '0.1'}" value="${flourItemUnitMode(item.id) === 'g' ? toInputValue(flourItemGramValue(item)) : toInputValue(item.percentage)}">
+                    <span class="flour-unit-toggle" data-flour-unit-toggle="${item.id}">
+                      <button type="button" data-flour-unit="%">%</button>
+                      <button type="button" data-flour-unit="g">g</button>
+                    </span>
+                  </span>
+                </label>
+                <div class="flour-control">Grammi
+                  <div class="flour-grams" data-flour-grams="${item.id}"></div>
+                </div>
+                <label class="flour-control">Proteine
+                  <input data-flour-protein type="number" min="0" step="0.1" placeholder="opz." value="${item.proteinPercentage ?? ''}">
+                </label>
+                <button type="button" class="flour-remove" data-remove-flour="${item.id}" ${flourMix.items.length <= 2 ? 'disabled' : ''}>Rimuovi</button>
+              </div>
+            `).join('')}
+            <button type="button" class="flour-add" data-add-flour>+ Aggiungi farina</button>
+            <p class="flour-status" id="flour-mix-status"></p>
+            <button type="button" class="flour-close" data-close-flour-mix>Chiudi</button>
+          `;
+          flourMix.items.forEach((item) => {
+            const row = $(`[data-flour-row="${item.id}"]`);
+            row.querySelector('[data-flour-profile]').value = item.flourProfileId;
+            row.querySelectorAll('[data-flour-unit]').forEach((button) => {
+              button.classList.toggle('active', button.dataset.flourUnit === flourItemUnitMode(item.id));
+              button.setAttribute('aria-pressed', String(button.dataset.flourUnit === flourItemUnitMode(item.id)));
+            });
+          });
+        }
+
+        $('#flour-mix-body').insertAdjacentHTML('beforeend', '<div class="flour-hints" id="flour-hints" hidden></div>');
+        refreshFlourMixComputed(true);
+      }
 
       function getFieldPercentage(field, flourTotal) {
         if (unitModes[field] === 'g') {
@@ -1037,6 +1461,7 @@
         $('#estimated-dough-weight').textContent = grams(estimatedDoughWeight);
         $('#starter-flour').textContent = grams(starterFlour);
         $('#starter-water').textContent = grams(starterWater);
+        refreshFlourMixComputed(false);
       }
 
       const timelinePresets = [
@@ -1352,6 +1777,115 @@
 
       $('#reset-timer').addEventListener('click', resetTimer);
 
+      $('#flour-mix-editor').addEventListener('click', (event) => {
+        if (event.target.closest('[data-open-flour-mix]')) {
+          flourMixOpen = true;
+          renderFlourMixEditor();
+          return;
+        }
+
+        if (event.target.closest('[data-close-flour-mix]')) {
+          syncFlourMixFromDom();
+          flourMixOpen = false;
+          renderFlourMixEditor();
+          calculate();
+          return;
+        }
+
+        const flourUnitButton = event.target.closest('[data-flour-unit]');
+        if (flourUnitButton) {
+          syncFlourMixFromDom();
+          const itemId = flourUnitButton.closest('[data-flour-unit-toggle]').dataset.flourUnitToggle;
+          const item = flourMix.items.find((currentItem) => currentItem.id === itemId);
+          if (!item) return;
+          const nextUnit = flourUnitButton.dataset.flourUnit;
+          if (flourItemUnitMode(itemId) === nextUnit) return;
+
+          if (nextUnit === 'g') {
+            flourGramValues[itemId] = gramsFromPercent(item.percentage, flourValue);
+          } else {
+            item.percentage = percentFromGrams(flourItemGramValue(item), flourValue);
+          }
+          flourUnitModes[itemId] = nextUnit;
+          switchToCustom();
+          renderFlourMixEditor();
+          calculate();
+          return;
+        }
+
+        const modeButton = event.target.closest('[data-flour-mode]');
+        if (modeButton) {
+          if (modeButton.dataset.flourMode === flourMix.mode) return;
+          syncFlourMixFromDom();
+          if (modeButton.dataset.flourMode === 'single') {
+            const firstItem = flourMix.items[0] || { id: 'flour-1', flourProfileId: '0-bread', percentage: 100 };
+            flourMix = { ...flourMix, mode: 'single', items: [{ ...firstItem, percentage: 100 }] };
+          } else {
+            const firstItem = flourMix.items[0] || { id: 'flour-1', flourProfileId: '0-bread', percentage: 100 };
+            flourMix = {
+              ...flourMix,
+              mode: 'mix',
+              items: [
+                { ...firstItem, percentage: 70 },
+                { id: `flour-${Date.now()}-1`, flourProfileId: 'manitoba', percentage: 30 },
+              ],
+            };
+          }
+          switchToCustom();
+          renderFlourMixEditor();
+          calculate();
+          return;
+        }
+
+        if (event.target.closest('[data-create-mix]')) {
+          flourMix = {
+            ...flourMix,
+            mode: 'mix',
+            items: [
+              { ...(flourMix.items[0] || { id: 'flour-1', flourProfileId: '0-bread' }), percentage: 70 },
+              { id: `flour-${Date.now()}-1`, flourProfileId: 'manitoba', percentage: 30 },
+            ],
+          };
+          switchToCustom();
+          renderFlourMixEditor();
+          calculate();
+          return;
+        }
+
+        if (event.target.closest('[data-add-flour]')) {
+          flourMix = {
+            ...flourMix,
+            mode: 'mix',
+            items: [...flourMix.items, { id: `flour-${Date.now()}`, flourProfileId: '0-bread', percentage: 0 }],
+          };
+          switchToCustom();
+          renderFlourMixEditor();
+          calculate();
+          return;
+        }
+
+        const removeButton = event.target.closest('[data-remove-flour]');
+        if (removeButton && flourMix.items.length > 2) {
+          flourMix = {
+            ...flourMix,
+            items: flourMix.items.filter((item) => item.id !== removeButton.dataset.removeFlour),
+          };
+          switchToCustom();
+          renderFlourMixEditor();
+          calculate();
+        }
+      });
+
+      $('#flour-mix-editor').addEventListener('input', () => {
+        switchToCustom();
+        refreshFlourMixComputed(true);
+      });
+
+      $('#flour-mix-editor').addEventListener('change', () => {
+        switchToCustom();
+        refreshFlourMixComputed(true);
+      });
+
       document.querySelectorAll('.form input').forEach((input) => {
         input.addEventListener('input', () => {
           switchToCustom();
@@ -1414,12 +1948,21 @@
         $('#starter').value = 20;
         $('#starter-hydration').value = 100;
         $('#oil').value = 0;
+        flourMix = {
+          id: 'current-flour-mix',
+          name: 'Farine formula',
+          mode: 'single',
+          items: [{ id: 'flour-1', flourProfileId: '0-bread', percentage: 100 }],
+        };
+        flourMixOpen = false;
         resetUnitModes();
+        renderFlourMixEditor();
         renderActiveProfile();
         calculate();
       });
 
       renderActiveProfile();
+      renderFlourMixEditor();
       renderUnitToggles();
       refreshGramValuesFromPercentages();
       calculate();
