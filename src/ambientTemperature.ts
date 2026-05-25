@@ -12,7 +12,7 @@ export const ambientTemperatureOptions: AmbientTemperatureOption[] = [
     id: 'cold',
     label: 'Freddo',
     description: 'Ambiente fresco: la fermentazione tende a rallentare.',
-    timelineHint: 'Prevedi tempi piu lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
+    timelineHint: 'Prevedi tempi più lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
   },
   {
     id: 'normal',

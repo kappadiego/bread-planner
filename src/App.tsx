@@ -10,7 +10,7 @@ import {
   Wheat,
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   defaultAmbientTemperature,
   type AmbientTemperatureId,
@@ -19,6 +19,20 @@ import { calculateBread, type BreadInputs, roundGram } from './calculations';
 import { AmbientTemperatureSelector } from './components/AmbientTemperatureSelector';
 import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
+import {
+  cloneTimelineSteps,
+  convertibleFields,
+  initialFlourMix,
+  initialInputs,
+  initialTimelinePresetId,
+  initialTimelineSteps,
+  initialTimelineTimer,
+  initialUnitModes,
+  type ConvertibleField,
+  type GramValues,
+  type InputUnit,
+  type UnitModes,
+} from './defaults';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
 import {
   calculateFlourBreakdown,
@@ -28,6 +42,14 @@ import {
   type FlourBreakdownRow,
   type FlourMix,
 } from './flours';
+import {
+  clearPersistedState,
+  loadPersistedState,
+  savePersistedState,
+  type PersistedBreadPlannerState,
+} from './localStorageState';
+import type { TimelineStep } from './timeline';
+import type { TimerState } from './timelineUtils';
 
 type IconProps = {
   size?: number;
@@ -39,10 +61,6 @@ type IconProps = {
 type IconComponent = ComponentType<IconProps>;
 
 type ActiveProfileId = string;
-type InputUnit = 'g' | '%';
-type ConvertibleField = 'saltPercentage' | 'starterPercentage' | 'oilPercentage';
-type UnitModes = Record<ConvertibleField, InputUnit>;
-type GramValues = Record<ConvertibleField, number>;
 
 type FieldConfig = {
   field: keyof BreadInputs;
@@ -52,36 +70,6 @@ type FieldConfig = {
   step?: number;
   icon: IconComponent;
   convertibleField?: ConvertibleField;
-};
-
-const initialInputs: BreadInputs = {
-  flourTotal: 1000,
-  hydration: 65,
-  saltPercentage: 2,
-  starterPercentage: 20,
-  starterHydration: 100,
-  oilPercentage: 0,
-};
-
-const convertibleFields: ConvertibleField[] = ['saltPercentage', 'starterPercentage', 'oilPercentage'];
-
-const initialUnitModes: UnitModes = {
-  saltPercentage: '%',
-  starterPercentage: '%',
-  oilPercentage: '%',
-};
-
-const initialFlourMix: FlourMix = {
-  id: 'current-flour-mix',
-  name: 'Farine formula',
-  mode: 'single',
-  items: [
-    {
-      id: 'flour-1',
-      flourProfileId: '0-bread',
-      percentage: 100,
-    },
-  ],
 };
 
 const safeNumber = (value: number) => (Number.isFinite(value) ? Math.max(value, 0) : 0);
@@ -118,14 +106,72 @@ const getEffectiveInputs = (
   return nextInputs;
 };
 
+type InitialAppState = {
+  inputs: BreadInputs;
+  unitModes: UnitModes;
+  gramValues: GramValues;
+  activeProfileId: ActiveProfileId;
+  customProfileName: string;
+  flourMix: FlourMix;
+  ambientTemperature: AmbientTemperatureId;
+  selectedTimelinePresetId: string;
+  timelineSteps: TimelineStep[];
+  timer: TimerState;
+  timerRestoreNotice: string | null;
+};
+
+const createDefaultAppState = (): InitialAppState => ({
+  inputs: initialInputs,
+  unitModes: initialUnitModes,
+  gramValues: getGramValues(initialInputs),
+  activeProfileId: 'base',
+  customProfileName: 'Custom',
+  flourMix: initialFlourMix,
+  ambientTemperature: defaultAmbientTemperature,
+  selectedTimelinePresetId: initialTimelinePresetId,
+  timelineSteps: initialTimelineSteps(),
+  timer: initialTimelineTimer,
+  timerRestoreNotice: null,
+});
+
+const createInitialAppState = (): InitialAppState => {
+  const loadedState = loadPersistedState();
+  if (!loadedState) {
+    return createDefaultAppState();
+  }
+
+  return {
+    inputs: loadedState.state.inputs,
+    unitModes: loadedState.state.unitModes,
+    gramValues: loadedState.state.gramValues,
+    activeProfileId: loadedState.state.activeProfileId,
+    customProfileName: loadedState.state.customProfileName,
+    flourMix: loadedState.state.flourMix,
+    ambientTemperature: loadedState.state.ambientTemperature,
+    selectedTimelinePresetId: loadedState.state.timeline.selectedPresetId,
+    timelineSteps: cloneTimelineSteps(loadedState.state.timeline.steps),
+    timer: loadedState.state.timeline.timer,
+    timerRestoreNotice: loadedState.timerWasRunning ? 'Timer ripristinato in pausa.' : null,
+  };
+};
+
 function App() {
-  const [inputs, setInputs] = useState<BreadInputs>(initialInputs);
-  const [unitModes, setUnitModes] = useState<UnitModes>(initialUnitModes);
-  const [gramValues, setGramValues] = useState<GramValues>(() => getGramValues(initialInputs));
-  const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>('base');
-  const [customProfileName, setCustomProfileName] = useState('Custom');
-  const [flourMix, setFlourMix] = useState<FlourMix>(initialFlourMix);
-  const [ambientTemperature, setAmbientTemperature] = useState<AmbientTemperatureId>(defaultAmbientTemperature);
+  const [initialAppState] = useState(createInitialAppState);
+  const [inputs, setInputs] = useState<BreadInputs>(initialAppState.inputs);
+  const [unitModes, setUnitModes] = useState<UnitModes>(initialAppState.unitModes);
+  const [gramValues, setGramValues] = useState<GramValues>(initialAppState.gramValues);
+  const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>(initialAppState.activeProfileId);
+  const [customProfileName, setCustomProfileName] = useState(initialAppState.customProfileName);
+  const [flourMix, setFlourMix] = useState<FlourMix>(initialAppState.flourMix);
+  const [ambientTemperature, setAmbientTemperature] = useState<AmbientTemperatureId>(initialAppState.ambientTemperature);
+  const [selectedTimelinePresetId, setSelectedTimelinePresetId] = useState(initialAppState.selectedTimelinePresetId);
+  const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>(initialAppState.timelineSteps);
+  const [timer, setTimer] = useState<TimerState>(initialAppState.timer);
+  const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
+  const [localMemoryMessage, setLocalMemoryMessage] = useState(
+    initialAppState.timerRestoreNotice ? 'Stato ripristinato localmente.' : 'Stato salvato localmente.',
+  );
+  const skipNextPersistRef = useRef(false);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
@@ -136,6 +182,44 @@ function App() {
     () => calculateFlourBreakdown(effectiveInputs.flourTotal, flourMix),
     [effectiveInputs.flourTotal, flourMix],
   );
+
+  useEffect(() => {
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+
+    const stateToPersist: PersistedBreadPlannerState = {
+      version: 1,
+      savedAt: Date.now(),
+      inputs,
+      unitModes,
+      gramValues,
+      activeProfileId,
+      customProfileName,
+      flourMix,
+      ambientTemperature,
+      timeline: {
+        selectedPresetId: selectedTimelinePresetId,
+        steps: timelineSteps,
+        timer,
+      },
+    };
+
+    savePersistedState(stateToPersist);
+    setLocalMemoryMessage('Stato salvato localmente.');
+  }, [
+    activeProfileId,
+    ambientTemperature,
+    customProfileName,
+    flourMix,
+    gramValues,
+    inputs,
+    selectedTimelinePresetId,
+    timelineSteps,
+    timer,
+    unitModes,
+  ]);
 
   const updateInput = (field: keyof BreadInputs, value: number) => {
     const safeValue = safeNumber(value);
@@ -184,13 +268,21 @@ function App() {
   };
 
   const reset = () => {
-    setInputs(initialInputs);
-    setUnitModes(initialUnitModes);
-    setGramValues(getGramValues(initialInputs));
-    setFlourMix(initialFlourMix);
-    setAmbientTemperature(defaultAmbientTemperature);
-    setActiveProfileId('base');
-    setCustomProfileName('Custom');
+    const defaultState = createDefaultAppState();
+    skipNextPersistRef.current = true;
+    clearPersistedState();
+    setInputs(defaultState.inputs);
+    setUnitModes(defaultState.unitModes);
+    setGramValues(defaultState.gramValues);
+    setFlourMix(defaultState.flourMix);
+    setAmbientTemperature(defaultState.ambientTemperature);
+    setSelectedTimelinePresetId(defaultState.selectedTimelinePresetId);
+    setTimelineSteps(defaultState.timelineSteps);
+    setTimer(defaultState.timer);
+    setTimerRestoreNotice(null);
+    setActiveProfileId(defaultState.activeProfileId);
+    setCustomProfileName(defaultState.customProfileName);
+    setLocalMemoryMessage('Memoria locale cancellata.');
   };
 
   const applyProfile = (profile: DoughProfile) => {
@@ -214,6 +306,15 @@ function App() {
   const updateAmbientTemperature = (value: AmbientTemperatureId) => {
     setAmbientTemperature(value);
     setActiveProfileId('custom');
+  };
+
+  const updateTimelineTimer = (nextTimer: TimerState) => {
+    setTimerRestoreNotice(null);
+    setTimer(nextTimer);
+  };
+
+  const clearLocalMemory = () => {
+    reset();
   };
 
   const customDisplayName = customProfileName.trim() || 'Custom';
@@ -282,13 +383,33 @@ function App() {
           </div>
         </section>
 
-        <TimelinePlanner />
+        <TimelinePlanner
+          activeProfileId={activeProfileId}
+          flourMix={flourMix}
+          ambientTemperature={ambientTemperature}
+          selectedPresetId={selectedTimelinePresetId}
+          steps={timelineSteps}
+          timer={timer}
+          timerRestoreNotice={timerRestoreNotice}
+          onSelectedPresetIdChange={setSelectedTimelinePresetId}
+          onStepsChange={setTimelineSteps}
+          onTimerChange={updateTimelineTimer}
+        />
 
         <QuickGuidelines />
 
-        <p className="text-center text-sm text-stone-500">
-          Le quantità sono calcolate con arrotondamento al grammo.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-3 text-center text-sm text-stone-500 sm:flex-row">
+          <p>
+            Le quantità sono calcolate con arrotondamento al grammo. {localMemoryMessage}
+          </p>
+          <button
+            type="button"
+            onClick={clearLocalMemory}
+            className="min-h-9 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-ink"
+          >
+            Cancella memoria locale
+          </button>
+        </div>
       </div>
     </main>
   );
@@ -554,6 +675,9 @@ function FlourTotalForm({
         />
       ) : (
         <div className="px-4 py-4">
+          <p className={`mb-3 rounded-lg px-3 py-2 text-sm font-semibold ${isMixValid ? 'bg-green-50 text-proof-700' : 'bg-amber-50 text-amber-900'}`}>
+            {mixStatus}
+          </p>
           <button
             type="button"
             onClick={() => setIsFlourPanelOpen(true)}

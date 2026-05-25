@@ -9,7 +9,7 @@ export const getAmbientTemperatureFlourHints = (
   const hints = new Set<string>();
 
   if (temperatureId === 'warm') {
-    hints.add('Con ambiente caldo, controlla l\'impasto prima del timer: la fermentazione puo accelerare.');
+    hints.add('Con ambiente caldo, controlla l\'impasto prima del timer: la fermentazione può accelerare.');
   }
 
   if (temperatureId === 'cold') {
@@ -17,11 +17,11 @@ export const getAmbientTemperatureFlourHints = (
   }
 
   if (profiles.some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high')) {
-    hints.add('Farine piu assorbenti o integrali possono richiedere piu attenzione durante riposi e pieghe.');
+    hints.add('Farine più assorbenti o integrali possono richiedere più attenzione durante riposi e pieghe.');
   }
 
   if (profiles.some((profile) => profile.strengthLevel === 'very-high')) {
-    hints.add('La presenza di farina forte puo aiutare nei processi piu lunghi.');
+    hints.add('La presenza di farina forte può aiutare nei processi più lunghi.');
   }
 
   return Array.from(hints);

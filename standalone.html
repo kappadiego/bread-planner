@@ -956,6 +956,69 @@
         margin-top: 18px;
       }
 
+      .timeline-recommendation,
+      .timeline-summary,
+      .timeline-context {
+        margin-bottom: 16px;
+        border-radius: 10px;
+        padding: 14px;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .timeline-recommendation {
+        border: 1px solid #efd29b;
+        background: var(--amber-soft);
+      }
+
+      .timeline-recommendation h3,
+      .timeline-context h3 {
+        margin: 0 0 6px;
+        font-size: 14px;
+      }
+
+      .timeline-recommendation p,
+      .timeline-context p {
+        margin: 6px 0 0;
+      }
+
+      .timeline-recommendation .secondary-button {
+        margin-top: 12px;
+      }
+
+      .timeline-summary {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        background: #faf9f7;
+      }
+
+      .timeline-summary div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .timeline-context {
+        background: #faf9f7;
+      }
+
+      .step-hints {
+        display: grid;
+        gap: 4px;
+        margin-top: 6px;
+      }
+
+      .step-hints span {
+        border-radius: 7px;
+        background: #fff;
+        padding: 5px 8px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+
       .primary-button {
         border: 0;
         background: var(--amber);
@@ -1035,6 +1098,17 @@
         font-size: 14px;
       }
 
+      .local-memory {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: #817a72;
+        font-size: 14px;
+        text-align: center;
+      }
+
       @media (min-width: 700px) {
         .topbar-inner {
           flex-direction: row;
@@ -1057,6 +1131,8 @@
         .step-row { grid-template-columns: 76px minmax(0, 1fr) 130px 44px; align-items: end; }
         .timer-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .timer-controls .wide { grid-column: span 2; }
+        .timeline-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .local-memory { flex-direction: row; }
         .guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
 
@@ -1180,6 +1256,9 @@
 
         <div class="timeline-grid">
           <div class="timeline-panel">
+            <div class="timeline-recommendation" id="timeline-recommendation"></div>
+            <div class="timeline-summary" id="timeline-summary"></div>
+            <div class="timeline-context" id="timeline-context" hidden></div>
             <div class="timeline-presets" id="timeline-presets"></div>
             <div class="steps" id="timeline-steps"></div>
             <button class="soft-button" id="add-step">+ Aggiungi step</button>
@@ -1218,7 +1297,10 @@
         </div>
       </section>
 
-      <p class="footnote">Le quantità sono calcolate con arrotondamento al grammo.</p>
+      <div class="local-memory">
+        <p class="footnote">Le quantità sono calcolate con arrotondamento al grammo. <span id="local-memory-message">Stato salvato localmente.</span></p>
+        <button type="button" class="secondary-button" id="clear-local-memory">Cancella memoria locale</button>
+      </div>
     </main>
 
     <script>
@@ -1245,7 +1327,7 @@
           label: 'Freddo',
           icon: 'i-snow',
           description: 'Ambiente fresco: la fermentazione tende a rallentare.',
-          timelineHint: 'Prevedi tempi piu lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
+          timelineHint: 'Prevedi tempi più lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
         },
         {
           id: 'normal',
@@ -1334,10 +1416,10 @@
       const ambientTemperatureFlourHints = () => {
         const profiles = flourMix.items.map((item) => flourProfile(item.flourProfileId));
         const hints = new Set();
-        if (ambientTemperature === 'warm') hints.add('Con ambiente caldo, controlla l\'impasto prima del timer: la fermentazione puo accelerare.');
+        if (ambientTemperature === 'warm') hints.add('Con ambiente caldo, controlla l\'impasto prima del timer: la fermentazione può accelerare.');
         if (ambientTemperature === 'cold') hints.add('Con ambiente fresco, i tempi della timeline potrebbero allungarsi.');
-        if (profiles.some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high')) hints.add('Farine piu assorbenti o integrali possono richiedere piu attenzione durante riposi e pieghe.');
-        if (profiles.some((profile) => profile.strengthLevel === 'very-high')) hints.add('La presenza di farina forte puo aiutare nei processi piu lunghi.');
+        if (profiles.some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high')) hints.add('Farine più assorbenti o integrali possono richiedere più attenzione durante riposi e pieghe.');
+        if (profiles.some((profile) => profile.strengthLevel === 'very-high')) hints.add('La presenza di farina forte può aiutare nei processi più lunghi.');
         return Array.from(hints);
       };
 
@@ -1426,6 +1508,7 @@
         renderFlourMixStatus();
         renderFlourBreakdown();
         renderAmbientTemperature();
+        renderTimelineAll();
       }
 
       function renderFlourMixEditor() {
@@ -1438,9 +1521,11 @@
         if (!flourMixOpen) {
           $('#flour-mix-body').innerHTML = `
             <div class="flour-closed">
+              <p class="flour-status" id="flour-mix-status"></p>
               <button type="button" class="flour-open" data-open-flour-mix>Modifica o crea mix</button>
             </div>
           `;
+          renderFlourMixStatus();
           renderFlourBreakdown();
           return;
         }
@@ -1666,10 +1751,18 @@
       let timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
       let timerInterval = null;
       let draggedStepId = null;
+      let skipNextLocalSave = false;
+      const storageKey = 'bread-planner:v1';
 
       const safeDuration = (durationMinutes) => Number.isFinite(durationMinutes) ? Math.max(0, durationMinutes) : 0;
       const getTotalDurationMs = (steps) =>
         steps.reduce((total, step) => total + safeDuration(step.durationMinutes) * 60 * 1000, 0);
+      const hasAbsorbentFlours = () => flourMix.items
+        .map((item) => flourProfile(item.flourProfileId))
+        .some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high' || ['type-1', 'type-2', 'whole-wheat', 'rye'].includes(profile.id));
+      const hasStrongFlours = () => flourMix.items
+        .map((item) => flourProfile(item.flourProfileId))
+        .some((profile) => profile.strengthLevel === 'very-high' || profile.id === 'manitoba');
 
       function getElapsedMs() {
         if (timer.startedAt === null) return 0;
@@ -1709,10 +1802,168 @@
         return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
       }
 
+      function getTimelineRecommendation() {
+        const reasons = [];
+        const warnings = [];
+        let recommendedPresetId = 'basic-same-day';
+        let confidence = 'medium';
+        const absorbent = hasAbsorbentFlours();
+        const strong = hasStrongFlours();
+
+        if (activeProfileId === 'focaccia') {
+          recommendedPresetId = 'focaccia';
+          confidence = 'high';
+          reasons.push('Il profilo Focaccia usa una lievitazione in teglia più lineare.');
+        } else if (activeProfileId === 'high') {
+          recommendedPresetId = 'high-hydration';
+          confidence = 'high';
+          reasons.push('Il profilo Alta idratazione beneficia di pieghe più ravvicinate.');
+        } else if (activeProfileId === 'base') {
+          recommendedPresetId = 'basic-same-day';
+          confidence = 'high';
+          reasons.push('Il profilo Pane base usa la timeline quotidiana come riferimento.');
+        } else if (strong) {
+          recommendedPresetId = 'long-fermentation';
+          reasons.push('La presenza di farina forte può sostenere processi più lunghi.');
+        } else if (absorbent) {
+          recommendedPresetId = 'high-hydration';
+          reasons.push('Il mix contiene farine più assorbenti: osserva l’impasto durante riposi e pieghe.');
+        } else {
+          reasons.push('Per un profilo Custom senza segnali particolari, la timeline base resta il punto di partenza più chiaro.');
+        }
+
+        if (ambientTemperature === 'warm') warnings.push('Ambiente caldo: controlla prima l’impasto, i tempi potrebbero accorciarsi.');
+        if (ambientTemperature === 'cold') warnings.push('Ambiente fresco: i tempi potrebbero allungarsi.');
+        if (absorbent && !reasons.some((reason) => reason.includes('assorbenti'))) reasons.push('Il mix contiene farine più assorbenti: osserva l’impasto durante riposi e pieghe.');
+        if (!isFlourMixValid()) {
+          confidence = 'low';
+          warnings.push(`Completa il mix farine prima di usare la timeline come riferimento. Ora sei a ${percentLabel(getFlourMixTotalPercentage())}%.`);
+        }
+
+        return { recommendedPresetId, confidence, reasons: reasons.slice(0, 3), warnings };
+      }
+
+      function isFermentationStep(step) {
+        const label = step.label.toLowerCase();
+        return ['bulk', 'fermentazione', 'lievitazione', 'proof', 'frigo'].some((term) => label.includes(term));
+      }
+
+      function isRestOrFoldStep(step) {
+        const label = step.label.toLowerCase();
+        return ['riposo', 'piega', 'fold', 'coil'].some((term) => label.includes(term));
+      }
+
+      function getTimelineAdjustments() {
+        const absorbent = hasAbsorbentFlours();
+        const strong = hasStrongFlours();
+        return timelineSteps.flatMap((step) => {
+          const adjustments = [];
+          if (ambientTemperature === 'warm' && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Controlla prima della fine: ambiente caldo.' });
+          if (ambientTemperature === 'cold' && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Potrebbe richiedere più tempo: ambiente fresco.' });
+          if (absorbent && isRestOrFoldStep(step)) adjustments.push({ stepId: step.id, message: 'Osserva consistenza e assorbimento prima di procedere.' });
+          if (strong && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Buona struttura per processi più lunghi: controlla sviluppo e tenuta.' });
+          return adjustments.slice(0, 2);
+        });
+      }
+
+      function saveLocalState() {
+        if (skipNextLocalSave) {
+          skipNextLocalSave = false;
+          return;
+        }
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify({
+            version: 1,
+            savedAt: Date.now(),
+            inputs: {
+              flourTotal: flourValue,
+              hydration: numberValue('#hydration'),
+              saltPercentage: getFieldPercentage('salt', flourValue),
+              starterPercentage: getFieldPercentage('starter', flourValue),
+              starterHydration: numberValue('#starter-hydration'),
+              oilPercentage: getFieldPercentage('oil', flourValue),
+            },
+            unitModes: {
+              saltPercentage: unitModes.salt,
+              starterPercentage: unitModes.starter,
+              oilPercentage: unitModes.oil,
+            },
+            gramValues: {
+              saltPercentage: gramValues.salt,
+              starterPercentage: gramValues.starter,
+              oilPercentage: gramValues.oil,
+            },
+            activeProfileId,
+            customProfileName,
+            flourMix,
+            ambientTemperature,
+            timeline: {
+              selectedPresetId: selectedTimelinePreset,
+              steps: timelineSteps,
+              timer,
+            },
+          }));
+          $('#local-memory-message').textContent = 'Stato salvato localmente.';
+        } catch {
+          $('#local-memory-message').textContent = 'Memoria locale non disponibile.';
+        }
+      }
+
+      function clearLocalState() {
+        try {
+          window.localStorage.removeItem(storageKey);
+        } catch {
+          // Ignore storage errors.
+        }
+        $('#local-memory-message').textContent = 'Memoria locale cancellata.';
+      }
+
+      function loadLocalState() {
+        try {
+          const rawValue = window.localStorage.getItem(storageKey);
+          if (!rawValue) return;
+          const state = JSON.parse(rawValue);
+          if (!state || state.version !== 1) return;
+          const savedUnitModes = state.unitModes || {};
+          const savedGramValues = state.gramValues || {};
+          const savedSaltUnit = savedUnitModes.salt ?? savedUnitModes.saltPercentage ?? '%';
+          const savedStarterUnit = savedUnitModes.starter ?? savedUnitModes.starterPercentage ?? '%';
+          const savedOilUnit = savedUnitModes.oil ?? savedUnitModes.oilPercentage ?? '%';
+          $('#base-value').value = state.inputs?.flourTotal ?? 1000;
+          $('#hydration').value = state.inputs?.hydration ?? 65;
+          $('#salt').value = savedSaltUnit === 'g' ? savedGramValues.salt ?? savedGramValues.saltPercentage ?? 20 : state.inputs?.saltPercentage ?? 2;
+          $('#starter').value = savedStarterUnit === 'g' ? savedGramValues.starter ?? savedGramValues.starterPercentage ?? 200 : state.inputs?.starterPercentage ?? 20;
+          $('#starter-hydration').value = state.inputs?.starterHydration ?? 100;
+          $('#oil').value = savedOilUnit === 'g' ? savedGramValues.oil ?? savedGramValues.oilPercentage ?? 0 : state.inputs?.oilPercentage ?? 0;
+          unitModes.salt = savedSaltUnit;
+          unitModes.starter = savedStarterUnit;
+          unitModes.oil = savedOilUnit;
+          gramValues.salt = savedGramValues.salt ?? savedGramValues.saltPercentage ?? 20;
+          gramValues.starter = savedGramValues.starter ?? savedGramValues.starterPercentage ?? 200;
+          gramValues.oil = savedGramValues.oil ?? savedGramValues.oilPercentage ?? 0;
+          activeProfileId = state.activeProfileId ?? 'base';
+          customProfileName = state.customProfileName ?? 'Custom';
+          flourMix = state.flourMix ?? flourMix;
+          ambientTemperature = state.ambientTemperature ?? 'normal';
+          selectedTimelinePreset = state.timeline?.selectedPresetId ?? timelinePresets[0].id;
+          timelineSteps = Array.isArray(state.timeline?.steps) ? state.timeline.steps.map((step) => ({ ...step })) : timelineSteps;
+          timer = state.timeline?.timer ?? timer;
+          if (timer.status === 'running') {
+            timer = { ...timer, status: 'paused', pausedAt: Date.now() };
+            $('#local-memory-message').textContent = 'Timer ripristinato in pausa.';
+          } else {
+            $('#local-memory-message').textContent = 'Stato ripristinato localmente.';
+          }
+        } catch {
+          $('#local-memory-message').textContent = 'Stato locale ignorato.';
+        }
+      }
+
       function resetTimer() {
         timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
         stopTimerTick();
         renderTimeline();
+        saveLocalState();
       }
 
       function stopTimerTick() {
@@ -1736,12 +1987,42 @@
         `).join('');
       }
 
+      function renderTimelineRecommendation() {
+        const recommendation = getTimelineRecommendation();
+        const preset = timelinePresets.find((item) => item.id === recommendation.recommendedPresetId) || timelinePresets[0];
+        $('#timeline-recommendation').innerHTML = `
+          <h3>Timeline suggerita</h3>
+          <p>Ti consigliamo: <strong>${preset.label}</strong>. <span>Confidenza: ${recommendation.confidence}.</span></p>
+          ${recommendation.reasons.map((reason) => `<p>${reason}</p>`).join('')}
+          ${recommendation.warnings.map((warning) => `<p><strong>${warning}</strong></p>`).join('')}
+          <button type="button" class="secondary-button" data-apply-recommendation="${preset.id}">Applica suggerimento</button>
+        `;
+      }
+
+      function renderTimelineSummary() {
+        const totalDurationMs = getTotalDurationMs(timelineSteps);
+        const firstStep = timelineSteps[0]?.label || 'Nessuno';
+        const lastStep = timelineSteps[timelineSteps.length - 1]?.label || 'Nessuno';
+        $('#timeline-summary').innerHTML = `
+          <div><span>Durata base</span><strong>${formatDuration(totalDurationMs)}</strong></div>
+          <div><span>Step</span><strong>${timelineSteps.length}</strong></div>
+          <div><span>Primo step</span><strong>${firstStep}</strong></div>
+          <div><span>Ultimo step</span><strong>${lastStep}</strong></div>
+        `;
+        const messages = [...getTimelineRecommendation().warnings, ...getTimelineAdjustments().map((item) => item.message)]
+          .filter((value, index, list) => list.indexOf(value) === index)
+          .slice(0, 3);
+        $('#timeline-context').hidden = messages.length === 0;
+        $('#timeline-context').innerHTML = `<h3>Indicazioni di contesto</h3>${messages.map((message) => `<p>${message}</p>`).join('')}`;
+      }
+
       function renderTimelineSteps() {
         if (timelineSteps.length === 0) {
           $('#timeline-steps').innerHTML = '<div class="empty-steps">Nessuno step nella timeline. Aggiungi uno step per avviare il timer.</div>';
           return;
         }
 
+        const adjustments = getTimelineAdjustments();
         $('#timeline-steps').innerHTML = timelineSteps.map((step, index) => `
           <div class="step-row ${step.id === draggedStepId ? 'dragging' : ''}" data-step-id="${step.id}">
             <div class="step-order">
@@ -1755,6 +2036,9 @@
             <label class="step-field compact">
               <span class="visually-hidden">Step</span>
               <input class="step-label" type="text" value="${step.label.replaceAll('"', '&quot;')}" />
+              <span class="step-hints">
+                ${adjustments.filter((item) => item.stepId === step.id).map((item) => `<span>${item.message}</span>`).join('')}
+              </span>
             </label>
             <label class="step-field compact">
               <span class="visually-hidden">Minuti</span>
@@ -1799,9 +2083,12 @@
       }
 
       function renderTimelineAll() {
+        renderTimelineRecommendation();
+        renderTimelineSummary();
         renderTimelinePresets();
         renderTimelineSteps();
         renderTimeline();
+        saveLocalState();
       }
 
       function moveTimelineStep(fromStepId, toStepId) {
@@ -1826,6 +2113,16 @@
         renderTimelineAll();
       });
 
+      $('#timeline-recommendation').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-apply-recommendation]');
+        if (!button) return;
+        const preset = timelinePresets.find((item) => item.id === button.dataset.applyRecommendation) || timelinePresets[0];
+        selectedTimelinePreset = preset.id;
+        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        resetTimer();
+        renderTimelineAll();
+      });
+
       $('#timeline-steps').addEventListener('input', (event) => {
         const row = event.target.closest('[data-step-id]');
         if (!row) return;
@@ -1834,6 +2131,7 @@
         if (event.target.classList.contains('step-label')) step.label = event.target.value;
         if (event.target.classList.contains('step-duration')) step.durationMinutes = Math.max(Number(event.target.value) || 0, 0);
         resetTimer();
+        renderTimelineSummary();
         renderTimeline();
       });
 
@@ -1903,6 +2201,7 @@
           startTimerTick();
         }
         renderTimeline();
+        saveLocalState();
       });
 
       $('#skip-step').addEventListener('click', () => {
@@ -1918,6 +2217,7 @@
           stopTimerTick();
         }
         renderTimeline();
+        saveLocalState();
       });
 
       $('#reset-timer').addEventListener('click', resetTimer);
@@ -2037,6 +2337,7 @@
         ambientTemperature = button.dataset.ambientTemperature;
         switchToCustom();
         renderAmbientTemperature();
+        renderTimelineAll();
       });
 
       document.querySelectorAll('.form input').forEach((input) => {
@@ -2088,9 +2389,11 @@
       $('#custom-profile-name').addEventListener('input', (event) => {
         customProfileName = event.target.value;
         renderActiveProfile();
+        saveLocalState();
       });
 
       $('#reset').addEventListener('click', () => {
+        skipNextLocalSave = true;
         flourValue = 1000;
         activeProfileId = 'base';
         customProfileName = 'Custom';
@@ -2109,13 +2412,24 @@
         };
         flourMixOpen = false;
         ambientTemperature = 'normal';
+        selectedTimelinePreset = timelinePresets[0].id;
+        timelineSteps = timelinePresets[0].steps.map((step) => ({ ...step }));
+        timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
+        stopTimerTick();
         resetUnitModes();
         renderFlourMixEditor();
         renderAmbientTemperature();
         renderActiveProfile();
         calculate();
+        renderTimelineAll();
+        clearLocalState();
       });
 
+      $('#clear-local-memory').addEventListener('click', () => {
+        $('#reset').click();
+      });
+
+      loadLocalState();
       renderActiveProfile();
       renderAmbientTemperature();
       renderFlourMixEditor();

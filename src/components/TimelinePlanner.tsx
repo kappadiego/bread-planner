@@ -10,7 +10,12 @@ import {
 } from 'lucide-react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AmbientTemperatureId } from '../ambientTemperature';
+import { cloneTimelineSteps } from '../defaults';
+import type { FlourMix } from '../flours';
 import { timelinePresets, type TimelineStep } from '../timeline';
+import { getTimelineAdjustments } from '../timelineAdjustments';
+import { getTimelineRecommendation } from '../timelineRecommendations';
 import {
   formatDuration,
   getCurrentStepInfo,
@@ -20,12 +25,31 @@ import {
   type TimerState,
 } from '../timelineUtils';
 
-const cloneSteps = (steps: TimelineStep[]) => steps.map((step) => ({ ...step }));
+type TimelinePlannerProps = {
+  activeProfileId: string;
+  flourMix: FlourMix;
+  ambientTemperature: AmbientTemperatureId;
+  selectedPresetId: string;
+  steps: TimelineStep[];
+  timer: TimerState;
+  timerRestoreNotice: string | null;
+  onSelectedPresetIdChange: (presetId: string) => void;
+  onStepsChange: (steps: TimelineStep[]) => void;
+  onTimerChange: (timer: TimerState) => void;
+};
 
-export function TimelinePlanner() {
-  const [selectedPresetId, setSelectedPresetId] = useState(timelinePresets[0].id);
-  const [steps, setSteps] = useState<TimelineStep[]>(() => cloneSteps(timelinePresets[0].steps));
-  const [timer, setTimer] = useState<TimerState>(initialTimer);
+export function TimelinePlanner({
+  activeProfileId,
+  flourMix,
+  ambientTemperature,
+  selectedPresetId,
+  steps,
+  timer,
+  timerRestoreNotice,
+  onSelectedPresetIdChange,
+  onStepsChange,
+  onTimerChange,
+}: TimelinePlannerProps) {
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
   const draggingStepIdRef = useRef<string | null>(null);
   const [, setNowTick] = useState(0);
@@ -41,6 +65,30 @@ export function TimelinePlanner() {
     totalDurationMs > 0 ? Math.min(100, Math.round((elapsedMs / totalDurationMs) * 100)) : 0;
   const nextStep = currentStepInfo ? steps[currentStepInfo.index + 1] : null;
   const canStart = steps.length > 0 && totalDurationMs > 0;
+  const recommendation = useMemo(
+    () => getTimelineRecommendation({ activeProfileId, flourMix, ambientTemperature }),
+    [activeProfileId, flourMix, ambientTemperature],
+  );
+  const recommendedPreset = useMemo(
+    () => timelinePresets.find((preset) => preset.id === recommendation.recommendedPresetId) ?? timelinePresets[0],
+    [recommendation.recommendedPresetId],
+  );
+  const adjustments = useMemo(
+    () => getTimelineAdjustments({ steps, flourMix, ambientTemperature }),
+    [steps, flourMix, ambientTemperature],
+  );
+  const adjustmentsByStepId = useMemo(() => {
+    const map = new Map<string, typeof adjustments>();
+    adjustments.forEach((adjustment) => {
+      map.set(adjustment.stepId, [...(map.get(adjustment.stepId) ?? []), adjustment]);
+    });
+    return map;
+  }, [adjustments]);
+  const firstStep = steps[0];
+  const lastStep = steps[steps.length - 1];
+  const contextWarnings = [...recommendation.warnings, ...adjustments.map((adjustment) => adjustment.message)]
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .slice(0, 3);
 
   useEffect(() => {
     if (timer.status !== 'running') {
@@ -56,34 +104,32 @@ export function TimelinePlanner() {
 
   useEffect(() => {
     if (timer.status === 'running' && totalDurationMs > 0 && getElapsedMs(timer) >= totalDurationMs) {
-      setTimer((current) => ({ ...current, status: 'finished', pausedAt: null }));
+      onTimerChange({ ...timer, status: 'finished', pausedAt: null });
     }
-  }, [timer, totalDurationMs]);
+  }, [onTimerChange, timer, totalDurationMs]);
 
-  const resetTimer = () => setTimer(initialTimer);
+  const resetTimer = () => onTimerChange(initialTimer);
 
   const applyPreset = (presetId: string) => {
     const preset = timelinePresets.find((item) => item.id === presetId) ?? timelinePresets[0];
-    setSelectedPresetId(preset.id);
-    setSteps(cloneSteps(preset.steps));
+    onSelectedPresetIdChange(preset.id);
+    onStepsChange(cloneTimelineSteps(preset.steps));
     resetTimer();
   };
 
   const restoreSelectedPreset = () => {
-    setSteps(cloneSteps(selectedPreset.steps));
+    onStepsChange(cloneTimelineSteps(selectedPreset.steps));
     resetTimer();
   };
 
   const updateStep = (stepId: string, patch: Partial<Pick<TimelineStep, 'label' | 'durationMinutes'>>) => {
-    setSteps((current) =>
-      current.map((step) => (step.id === stepId ? { ...step, ...patch } : step)),
-    );
+    onStepsChange(steps.map((step) => (step.id === stepId ? { ...step, ...patch } : step)));
     resetTimer();
   };
 
   const addStep = () => {
-    setSteps((current) => [
-      ...current,
+    onStepsChange([
+      ...steps,
       {
         id: `custom-${Date.now()}`,
         label: 'Nuovo step',
@@ -94,27 +140,25 @@ export function TimelinePlanner() {
   };
 
   const deleteStep = (stepId: string) => {
-    setSteps((current) => current.filter((step) => step.id !== stepId));
+    onStepsChange(steps.filter((step) => step.id !== stepId));
     resetTimer();
   };
 
   const moveStep = (fromStepId: string, toStepId: string) => {
-    setSteps((current) => {
-      const fromIndex = current.findIndex((step) => step.id === fromStepId);
-      const toIndex = current.findIndex((step) => step.id === toStepId);
+    const fromIndex = steps.findIndex((step) => step.id === fromStepId);
+    const toIndex = steps.findIndex((step) => step.id === toStepId);
 
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-        return current;
-      }
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return;
+    }
 
-      const next = [...current];
-      const [movedStep] = next.splice(fromIndex, 1);
-      if (!movedStep) {
-        return current;
-      }
-      next.splice(toIndex, 0, movedStep);
-      return next;
-    });
+    const next = [...steps];
+    const [movedStep] = next.splice(fromIndex, 1);
+    if (!movedStep) {
+      return;
+    }
+    next.splice(toIndex, 0, movedStep);
+    onStepsChange(next);
   };
 
   const startStepDrag = (stepId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -156,7 +200,7 @@ export function TimelinePlanner() {
       return;
     }
 
-    setTimer({
+    onTimerChange({
       status: 'running',
       startedAt: Date.now(),
       pausedAt: null,
@@ -165,23 +209,21 @@ export function TimelinePlanner() {
   };
 
   const pause = () => {
-    setTimer((current) =>
-      current.status === 'running' ? { ...current, status: 'paused', pausedAt: Date.now() } : current,
-    );
+    if (timer.status === 'running') {
+      onTimerChange({ ...timer, status: 'paused', pausedAt: Date.now() });
+    }
   };
 
   const resume = () => {
-    setTimer((current) => {
-      if (current.status !== 'paused' || current.pausedAt === null) {
-        return current;
-      }
+    if (timer.status !== 'paused' || timer.pausedAt === null) {
+      return;
+    }
 
-      return {
-        ...current,
-        status: 'running',
-        accumulatedPauseMs: current.accumulatedPauseMs + Date.now() - current.pausedAt,
-        pausedAt: null,
-      };
+    onTimerChange({
+      ...timer,
+      status: 'running',
+      accumulatedPauseMs: timer.accumulatedPauseMs + Date.now() - timer.pausedAt,
+      pausedAt: null,
     });
   };
 
@@ -193,12 +235,12 @@ export function TimelinePlanner() {
     const targetElapsed = Math.min(currentStepInfo.stepEndMs, totalDurationMs);
     const baseNow = timer.status === 'paused' && timer.pausedAt !== null ? timer.pausedAt : Date.now();
 
-    setTimer((current) => ({
-      ...current,
-      status: targetElapsed >= totalDurationMs ? 'finished' : current.status,
-      startedAt: baseNow - targetElapsed - current.accumulatedPauseMs,
-      pausedAt: current.status === 'paused' ? baseNow : null,
-    }));
+    onTimerChange({
+      ...timer,
+      status: targetElapsed >= totalDurationMs ? 'finished' : timer.status,
+      startedAt: baseNow - targetElapsed - timer.accumulatedPauseMs,
+      pausedAt: timer.status === 'paused' ? baseNow : null,
+    });
   };
 
   return (
@@ -222,6 +264,59 @@ export function TimelinePlanner() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.75fr)]">
         <div className="rounded-[12px] border border-stone-200 bg-white p-4">
+          <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-amber-900">Timeline suggerita</h3>
+                <p className="mt-1 text-sm leading-5 text-stone-700">
+                  Ti consigliamo: <span className="font-semibold text-ink">{recommendedPreset.label}</span>.
+                  <span className="ml-1 text-stone-600">Confidenza: {recommendation.confidence}.</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => applyPreset(recommendation.recommendedPresetId)}
+                className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+              >
+                Applica suggerimento
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 text-sm leading-5 text-stone-700">
+              {recommendation.reasons.map((reason) => (
+                <p key={reason}>{reason}</p>
+              ))}
+              {recommendation.warnings.map((warning) => (
+                <p key={warning} className="font-medium text-amber-950">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          </section>
+
+          <section className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Durata base" value={formatDuration(totalDurationMs)} />
+            <Metric label="Step" value={String(steps.length)} />
+            <Metric label="Primo step" value={firstStep?.label ?? 'Nessuno'} />
+            <Metric label="Ultimo step" value={lastStep?.label ?? 'Nessuno'} />
+          </section>
+
+          {contextWarnings.length > 0 && (
+            <section className="mb-4 rounded-lg bg-stone-50 px-4 py-3 text-sm leading-5 text-stone-700">
+              <h3 className="font-semibold text-ink">Indicazioni di contesto</h3>
+              {contextWarnings.map((warning) => (
+                <p key={warning} className="mt-1">
+                  {warning}
+                </p>
+              ))}
+            </section>
+          )}
+
+          {timerRestoreNotice && (
+            <p className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+              {timerRestoreNotice}
+            </p>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {timelinePresets.map((preset) => (
               <button
@@ -246,59 +341,71 @@ export function TimelinePlanner() {
                 Nessuno step nella timeline. Aggiungi uno step per avviare il timer.
               </div>
             ) : (
-              steps.map((step, index) => (
-                <div
-                  key={step.id}
-                  data-step-id={step.id}
-                  className={`grid gap-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3 transition sm:grid-cols-[76px_minmax(0,1fr)_130px_40px] sm:items-center ${
-                    draggingStepId === step.id ? 'scale-[0.99] border-amber-300 bg-amber-50/70 shadow-sm' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
+              steps.map((step, index) => {
+                const stepAdjustments = adjustmentsByStepId.get(step.id) ?? [];
+                return (
+                  <div
+                    key={step.id}
+                    data-step-id={step.id}
+                    className={`grid gap-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3 transition sm:grid-cols-[76px_minmax(0,1fr)_130px_40px] sm:items-start ${
+                      draggingStepId === step.id ? 'scale-[0.99] border-amber-300 bg-amber-50/70 shadow-sm' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 sm:pt-1">
+                      <button
+                        type="button"
+                        onPointerDown={(event) => startStepDrag(step.id, event)}
+                        className="grid h-9 w-8 touch-none place-items-center rounded-lg border border-stone-200 bg-white text-stone-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 active:cursor-grabbing"
+                        aria-label={`Sposta ${step.label}`}
+                      >
+                        <GripVertical size={18} aria-hidden="true" />
+                      </button>
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-sm font-semibold text-amber-700 ring-1 ring-stone-200">
+                        {index + 1}
+                      </span>
+                    </div>
+                    <label className="grid gap-2">
+                      <span className="sr-only">Step</span>
+                      <input
+                        type="text"
+                        value={step.label}
+                        onChange={(event) => updateStep(step.id, { label: event.currentTarget.value })}
+                        className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium normal-case tracking-normal text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                      />
+                      {stepAdjustments.length > 0 && (
+                        <span className="grid gap-1">
+                          {stepAdjustments.map((adjustment) => (
+                            <span key={`${step.id}-${adjustment.level}-${adjustment.message}`} className="rounded-md bg-white px-2 py-1 text-xs font-medium text-stone-600 ring-1 ring-stone-200">
+                              {adjustment.message}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </label>
+                    <label className="grid">
+                      <span className="sr-only">Minuti</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={step.durationMinutes}
+                        onChange={(event) =>
+                          updateStep(step.id, { durationMinutes: event.currentTarget.valueAsNumber || 0 })
+                        }
+                        className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium normal-case tracking-normal text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                      />
+                    </label>
                     <button
                       type="button"
-                      onPointerDown={(event) => startStepDrag(step.id, event)}
-                      className="grid h-9 w-8 touch-none place-items-center rounded-lg border border-stone-200 bg-white text-stone-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 active:cursor-grabbing"
-                      aria-label={`Sposta ${step.label}`}
+                      onClick={() => deleteStep(step.id)}
+                      className="grid h-10 w-10 place-items-center rounded-lg border border-stone-200 bg-white text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Elimina ${step.label}`}
                     >
-                      <GripVertical size={18} aria-hidden="true" />
+                      <Trash2 size={18} aria-hidden="true" />
                     </button>
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-sm font-semibold text-amber-700 ring-1 ring-stone-200">
-                      {index + 1}
-                    </span>
                   </div>
-                  <label className="grid">
-                    <span className="sr-only">Step</span>
-                    <input
-                      type="text"
-                      value={step.label}
-                      onChange={(event) => updateStep(step.id, { label: event.currentTarget.value })}
-                      className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium normal-case tracking-normal text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
-                    />
-                  </label>
-                  <label className="grid">
-                    <span className="sr-only">Minuti</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={step.durationMinutes}
-                      onChange={(event) =>
-                        updateStep(step.id, { durationMinutes: event.currentTarget.valueAsNumber || 0 })
-                      }
-                      className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium normal-case tracking-normal text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => deleteStep(step.id)}
-                    className="grid h-10 w-10 place-items-center rounded-lg border border-stone-200 bg-white text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                    aria-label={`Elimina ${step.label}`}
-                  >
-                    <Trash2 size={18} aria-hidden="true" />
-                  </button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
