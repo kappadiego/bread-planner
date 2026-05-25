@@ -1,19 +1,20 @@
-import { CirclePlus, Trash2, Wheat } from 'lucide-react';
+import { CirclePlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FlourMix } from '../flours';
 import {
   calculateFlourBreakdown,
   flourProfiles,
   getFlourMixHints,
-  getFlourMixTotalPercentage,
   getFlourProfile,
   getWeightedProteinPercentage,
-  isFlourMixValid,
 } from '../flours';
 
 type FlourMixEditorProps = {
   flourTotal: number;
   flourMix: FlourMix;
+  flourPrompt: string;
+  mixStatus: string;
+  isMixValid: boolean;
   onChange: (flourMix: FlourMix) => void;
   onClose: () => void;
 };
@@ -31,12 +32,18 @@ const formatPercent = (value: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
-export function FlourMixEditor({ flourTotal, flourMix, onChange, onClose }: FlourMixEditorProps) {
+export function FlourMixEditor({
+  flourTotal,
+  flourMix,
+  flourPrompt,
+  mixStatus,
+  isMixValid,
+  onChange,
+  onClose,
+}: FlourMixEditorProps) {
   const [unitModes, setUnitModes] = useState<Record<string, MixInputUnit>>({});
   const [gramValues, setGramValues] = useState<Record<string, number>>({});
   const breakdown = calculateFlourBreakdown(flourTotal, flourMix);
-  const totalPercentage = getFlourMixTotalPercentage(flourMix);
-  const isValid = isFlourMixValid(flourMix);
   const weightedProtein = getWeightedProteinPercentage(flourMix);
   const hints = getFlourMixHints(flourMix);
   const firstItem = flourMix.items[0] ?? createMixItem(0, 100);
@@ -134,41 +141,36 @@ export function FlourMixEditor({ flourTotal, flourMix, onChange, onClose }: Flou
 
   return (
     <section className="border-t border-stone-200 bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-3 text-lg font-semibold text-ink">
-            <Wheat size={23} strokeWidth={1.8} aria-hidden="true" />
-            Farine
-          </h2>
-          <p className="mt-1 text-sm leading-5 text-stone-600">
-            Scomponi la farina totale senza cambiare la formula principale.
-          </p>
-        </div>
+      <div className="mb-4 grid gap-3">
+        <p className="text-sm leading-5 text-stone-700">{flourPrompt}</p>
+        <p className={`rounded-lg px-3 py-2 text-sm font-semibold ${isMixValid ? 'bg-green-50 text-proof-700' : 'bg-amber-50 text-amber-900'}`}>
+          {mixStatus}
+        </p>
+      </div>
 
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-1 text-sm font-semibold">
-            {(['single', 'mix'] as FlourMix['mode'][]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setMode(mode)}
-                className={`min-h-9 rounded-md px-3 transition ${
-                  flourMix.mode === mode ? 'bg-white text-amber-700 shadow-sm ring-1 ring-stone-200' : 'text-stone-600'
-                }`}
-                aria-pressed={flourMix.mode === mode}
-              >
-                {mode === 'single' ? 'Una farina' : 'Mix farine'}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-9 rounded-lg border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-600 transition hover:text-ink"
-          >
-            Chiudi
-          </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid w-full max-w-[260px] grid-cols-2 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-1 text-sm font-semibold">
+          {(['single', 'mix'] as FlourMix['mode'][]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setMode(mode)}
+              className={`min-h-9 rounded-md px-3 transition ${
+                flourMix.mode === mode ? 'bg-white text-amber-700 shadow-sm ring-1 ring-stone-200' : 'text-stone-600'
+              }`}
+              aria-pressed={flourMix.mode === mode}
+            >
+              {mode === 'single' ? 'Una farina' : 'Mix farine'}
+            </button>
+          ))}
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-9 rounded-lg border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-600 transition hover:text-ink sm:ml-auto"
+        >
+          Chiudi
+        </button>
       </div>
 
       {flourMix.mode === 'single' ? (
@@ -291,7 +293,7 @@ export function FlourMixEditor({ flourTotal, flourMix, onChange, onClose }: Flou
             );
           })}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <button
               type="button"
               onClick={addItem}
@@ -300,11 +302,6 @@ export function FlourMixEditor({ flourTotal, flourMix, onChange, onClose }: Flou
               <CirclePlus size={18} aria-hidden="true" />
               Aggiungi farina
             </button>
-            <p className={`rounded-lg px-3 py-2 text-sm font-semibold ${isValid ? 'bg-green-50 text-proof-700' : 'bg-amber-50 text-amber-900'}`}>
-              {isValid
-                ? `Mix completo: ${formatPercent(totalPercentage)}%.`
-                : `Il mix deve arrivare al 100%. Ora sei a ${formatPercent(totalPercentage)}%.`}
-            </p>
           </div>
         </div>
       )}

@@ -11,11 +11,23 @@ import {
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
+import {
+  defaultAmbientTemperature,
+  type AmbientTemperatureId,
+} from './ambientTemperature';
 import { calculateBread, type BreadInputs, roundGram } from './calculations';
+import { AmbientTemperatureSelector } from './components/AmbientTemperatureSelector';
 import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
-import { calculateFlourBreakdown, getFlourProfile, type FlourBreakdownRow, type FlourMix } from './flours';
+import {
+  calculateFlourBreakdown,
+  getFlourMixTotalPercentage,
+  getFlourProfile,
+  isFlourMixValid,
+  type FlourBreakdownRow,
+  type FlourMix,
+} from './flours';
 
 type IconProps = {
   size?: number;
@@ -113,6 +125,7 @@ function App() {
   const [activeProfileId, setActiveProfileId] = useState<ActiveProfileId>('base');
   const [customProfileName, setCustomProfileName] = useState('Custom');
   const [flourMix, setFlourMix] = useState<FlourMix>(initialFlourMix);
+  const [ambientTemperature, setAmbientTemperature] = useState<AmbientTemperatureId>(defaultAmbientTemperature);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
@@ -175,6 +188,7 @@ function App() {
     setUnitModes(initialUnitModes);
     setGramValues(getGramValues(initialInputs));
     setFlourMix(initialFlourMix);
+    setAmbientTemperature(defaultAmbientTemperature);
     setActiveProfileId('base');
     setCustomProfileName('Custom');
   };
@@ -194,6 +208,11 @@ function App() {
 
   const updateFlourMix = (nextFlourMix: FlourMix) => {
     setFlourMix(nextFlourMix);
+    setActiveProfileId('custom');
+  };
+
+  const updateAmbientTemperature = (value: AmbientTemperatureId) => {
+    setAmbientTemperature(value);
     setActiveProfileId('custom');
   };
 
@@ -233,6 +252,12 @@ function App() {
                 flourMix={flourMix}
                 onChange={(value) => updateInput('flourTotal', value)}
                 onFlourMixChange={updateFlourMix}
+              />
+
+              <AmbientTemperatureSelector
+                value={ambientTemperature}
+                flourMix={flourMix}
+                onChange={updateAmbientTemperature}
               />
 
               <CalculatorForm
@@ -284,8 +309,8 @@ function Header({ onReset }: { onReset: () => void }) {
 
         <nav className="flex flex-wrap items-center gap-4 text-sm font-medium text-stone-700 sm:gap-7">
           <HeaderAction icon={<RotateCcw size={20} />} label="Ripristina" onClick={onReset} />
-          <HeaderAction icon={<Bookmark size={20} />} label="Salva ricetta" />
-          <HeaderAction icon={<CircleHelp size={20} />} label="Guida" />
+          <HeaderAction icon={<Bookmark size={20} />} label="Salva ricetta" disabled />
+          <HeaderAction icon={<CircleHelp size={20} />} label="Guida" disabled />
         </nav>
       </div>
     </header>
@@ -296,16 +321,20 @@ function HeaderAction({
   icon,
   label,
   onClick,
+  disabled = false,
 }: {
   icon: ReactNode;
   label: string;
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-9 items-center gap-2 rounded-md px-1 text-stone-700 transition hover:text-ink focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
+      disabled={disabled}
+      title={disabled ? 'Disponibile in una prossima release' : undefined}
+      className="inline-flex min-h-9 items-center gap-2 rounded-md px-1 text-stone-700 transition hover:text-ink focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:text-stone-400"
     >
       {icon}
       <span>{label}</span>
@@ -495,9 +524,14 @@ function FlourTotalForm({
 }) {
   const [isFlourPanelOpen, setIsFlourPanelOpen] = useState(false);
   const firstFlourProfile = getFlourProfile(flourMix.items[0]?.flourProfileId ?? '0-bread');
+  const totalPercentage = getFlourMixTotalPercentage(flourMix);
+  const isMixValid = isFlourMixValid(flourMix);
   const flourPrompt = flourMix.mode === 'mix'
     ? 'Hai configurato un mix farine. Vuoi modificarlo?'
     : `La farina base è impostata su ${firstFlourProfile.label}. Vuoi modificare o creare un mix?`;
+  const mixStatus = isMixValid
+    ? `Mix completo: ${formatPercent(totalPercentage)}%.`
+    : `Il mix deve arrivare al 100%. Ora sei a ${formatPercent(totalPercentage)}%.`;
 
   return (
     <form className="mt-6 rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
@@ -512,18 +546,20 @@ function FlourTotalForm({
         <FlourMixEditor
           flourTotal={flourTotal}
           flourMix={flourMix}
+          flourPrompt={flourPrompt}
+          mixStatus={mixStatus}
+          isMixValid={isMixValid}
           onChange={onFlourMixChange}
           onClose={() => setIsFlourPanelOpen(false)}
         />
       ) : (
         <div className="px-4 py-4">
-          <p className="text-sm leading-5 text-stone-700">{flourPrompt}</p>
           <button
             type="button"
             onClick={() => setIsFlourPanelOpen(true)}
-            className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
           >
-            Clicca qui
+            Modifica o crea mix
           </button>
         </div>
       )}

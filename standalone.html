@@ -105,6 +105,11 @@
         font-weight: 500;
       }
 
+      .action:disabled {
+        cursor: not-allowed;
+        color: #a8a29a;
+      }
+
       .page {
         display: grid;
         gap: 24px;
@@ -264,21 +269,6 @@
         display: none;
       }
 
-      .flour-mix-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 18px;
-        font-weight: 700;
-      }
-
-      .flour-mix-title + p {
-        margin: 4px 0 0;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.45;
-      }
-
       .flour-mode {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -417,6 +407,19 @@
         line-height: 1.45;
       }
 
+      .flour-open-copy {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .flour-open-copy p {
+        margin: 0;
+        color: #4f4a44;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
       .flour-open {
         min-height: 40px;
         border: 1px solid #e8c88d;
@@ -435,6 +438,81 @@
         color: #6f6860;
         padding: 0 12px;
         font-weight: 700;
+      }
+
+      .ambient-temperature {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 16px;
+      }
+
+      .ambient-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .ambient-head h2 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .ambient-options {
+        display: grid;
+        gap: 12px;
+      }
+
+      .ambient-option {
+        display: flex;
+        min-height: 82px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid #cfc8bd;
+        border-radius: 10px;
+        background: #fff;
+        color: #4f4a44;
+        padding: 12px;
+        text-align: center;
+      }
+
+      .ambient-option .i {
+        width: 25px;
+        height: 25px;
+      }
+
+      .ambient-option strong {
+        font-size: 14px;
+      }
+
+      .ambient-option.active {
+        border-color: var(--amber);
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .ambient-hint {
+        margin: 0;
+        border-radius: 9px;
+        background: #f8f7f5;
+        padding: 12px;
+        color: #4f4a44;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .ambient-hint p {
+        margin: 0;
+      }
+
+      .ambient-hint p + p {
+        margin-top: 8px;
       }
 
       .form {
@@ -969,10 +1047,11 @@
         .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .field { grid-template-columns: 1fr 260px; align-items: center; }
-        .flour-mix-head { flex-direction: row; align-items: start; justify-content: space-between; }
+        .flour-mix-head { flex-direction: row; align-items: center; justify-content: space-between; }
         .flour-mode { min-width: 250px; }
         .flour-row { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
         .flour-remove { grid-column: span 2; }
+        .ambient-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .timeline-head { flex-direction: row; align-items: end; justify-content: space-between; }
         .timeline-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .step-row { grid-template-columns: 76px minmax(0, 1fr) 130px 44px; align-items: end; }
@@ -1011,6 +1090,9 @@
       <symbol id="i-bulb" viewBox="0 0 32 32"><path d="M16 5.5a8 8 0 0 0-4.2 14.8c.8.5 1.2 1.4 1.2 2.3v.4h6v-.4c0-1 .5-1.8 1.3-2.3A8 8 0 0 0 16 5.5Z" /><path d="M13 26h6" /><path d="M14 29h4" /></symbol>
       <symbol id="i-clock" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" /><path d="M16 10v7l4 2" /></symbol>
       <symbol id="i-thermo" viewBox="0 0 32 32"><path d="M14 18.5V7a2 2 0 1 1 4 0v11.5a5 5 0 1 1-4 0Z" /><path d="M16 21v-7" /></symbol>
+      <symbol id="i-snow" viewBox="0 0 32 32"><path d="M16 5v22" /><path d="M7 10l18 12" /><path d="M25 10 7 22" /><path d="m12 7 4 4 4-4" /><path d="m12 25 4-4 4 4" /></symbol>
+      <symbol id="i-circle" viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" /></symbol>
+      <symbol id="i-sun" viewBox="0 0 32 32"><circle cx="16" cy="16" r="5" /><path d="M16 3v4" /><path d="M16 25v4" /><path d="M3 16h4" /><path d="M25 16h4" /><path d="m6.8 6.8 2.8 2.8" /><path d="m22.4 22.4 2.8 2.8" /><path d="m25.2 6.8-2.8 2.8" /><path d="m9.6 22.4-2.8 2.8" /></symbol>
       <symbol id="i-calendar" viewBox="0 0 32 32"><path d="M8 9h16v17H8z" /><path d="M8 14h16" /><path d="M12 6v5" /><path d="M20 6v5" /></symbol>
       <symbol id="i-help" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" /><path d="M13.5 13.2a3 3 0 1 1 4.6 2.5c-1.1.8-2.1 1.6-2.1 3.1" /><path d="M16 23h.1" /></symbol>
     </svg>
@@ -1023,8 +1105,8 @@
         </div>
         <nav class="actions">
           <button class="action" id="reset">↻ Ripristina</button>
-          <button class="action">♡ Salva ricetta</button>
-          <button class="action"><svg class="i"><use href="#i-help" /></svg> Guida</button>
+          <button class="action" disabled title="Disponibile in una prossima release">♡ Salva ricetta</button>
+          <button class="action" disabled title="Disponibile in una prossima release"><svg class="i"><use href="#i-help" /></svg> Guida</button>
         </nav>
       </div>
     </header>
@@ -1047,20 +1129,28 @@
 
             <form class="form flour-total-form">
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-wheat" /></svg><span id="base-label">Farina</span></span><span class="input-wrap"><input id="base-value" type="number" min="0" value="1000" /><span class="unit">g</span></span></label>
-              <section class="flour-mix" id="flour-mix-editor" aria-labelledby="flour-mix-title">
+              <section class="flour-mix" id="flour-mix-editor" aria-label="Gestione farine">
                 <div class="flour-mix-head" hidden>
-                  <div>
-                    <div class="flour-mix-title" id="flour-mix-title"><svg class="i"><use href="#i-wheat" /></svg>Farine</div>
-                    <p>Scomponi la farina totale senza cambiare la formula principale.</p>
-                  </div>
                   <div class="flour-mode" aria-label="Modalità farine">
                     <button type="button" data-flour-mode="single">Una farina</button>
                     <button type="button" data-flour-mode="mix">Mix farine</button>
                   </div>
+                  <button type="button" class="flour-close" data-close-flour-mix>Chiudi</button>
                 </div>
                 <div class="flour-mix-body" id="flour-mix-body"></div>
               </section>
             </form>
+
+            <section class="ambient-temperature" aria-labelledby="ambient-title">
+              <div class="ambient-head">
+                <svg class="i" aria-hidden="true"><use href="#i-thermo" /></svg>
+                <div>
+                  <h2 id="ambient-title">Temperatura ambiente</h2>
+                </div>
+              </div>
+              <div class="ambient-options" role="group" aria-label="Temperatura ambiente" id="ambient-options"></div>
+              <div class="ambient-hint" id="ambient-hint"></div>
+            </section>
 
             <form class="form">
               <label class="field"><span class="field-label"><svg class="i"><use href="#i-drop" /></svg>Idratazione</span><span class="input-wrap"><input id="hydration" type="number" min="0" step="0.1" value="65" /><span class="unit">%</span></span></label>
@@ -1149,9 +1239,34 @@
         { id: 'custom', label: 'Farina custom', description: 'Profilo libero per farine non ancora classificate.', absorptionLevel: 'medium', strengthLevel: 'medium', glutenBehavior: 'balanced' },
       ];
 
+      const ambientTemperatureOptions = [
+        {
+          id: 'cold',
+          label: 'Freddo',
+          icon: 'i-snow',
+          description: 'Ambiente fresco: la fermentazione tende a rallentare.',
+          timelineHint: 'Prevedi tempi piu lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
+        },
+        {
+          id: 'normal',
+          label: 'Normale',
+          icon: 'i-circle',
+          description: 'Condizione stabile: usa i tempi base della timeline.',
+          timelineHint: 'I preset timeline possono essere usati come riferimento principale.',
+        },
+        {
+          id: 'warm',
+          label: 'Caldo',
+          icon: 'i-sun',
+          description: 'Ambiente caldo: la fermentazione tende ad accelerare.',
+          timelineHint: 'Controlla prima l\'impasto: i passaggi potrebbero richiedere meno tempo.',
+        },
+      ];
+
       let flourValue = 1000;
       let activeProfileId = 'base';
       let customProfileName = 'Custom';
+      let ambientTemperature = 'normal';
       let flourMix = {
         id: 'current-flour-mix',
         name: 'Farine formula',
@@ -1215,6 +1330,16 @@
         if (profiles.some((profile) => profile.glutenBehavior === 'different')) hints.add('Alcune farine hanno un comportamento diverso dal grano tenero.');
         return Array.from(hints);
       };
+      const ambientTemperatureOption = (id) => ambientTemperatureOptions.find((option) => option.id === id) || ambientTemperatureOptions[1];
+      const ambientTemperatureFlourHints = () => {
+        const profiles = flourMix.items.map((item) => flourProfile(item.flourProfileId));
+        const hints = new Set();
+        if (ambientTemperature === 'warm') hints.add('Con ambiente caldo, controlla l\'impasto prima del timer: la fermentazione puo accelerare.');
+        if (ambientTemperature === 'cold') hints.add('Con ambiente fresco, i tempi della timeline potrebbero allungarsi.');
+        if (profiles.some((profile) => profile.absorptionLevel === 'high' || profile.absorptionLevel === 'very-high')) hints.add('Farine piu assorbenti o integrali possono richiedere piu attenzione durante riposi e pieghe.');
+        if (profiles.some((profile) => profile.strengthLevel === 'very-high')) hints.add('La presenza di farina forte puo aiutare nei processi piu lunghi.');
+        return Array.from(hints);
+      };
 
       function renderFlourBreakdown() {
         $('#flour-breakdown').innerHTML = calculateFlourBreakdown().map((row) => `
@@ -1245,6 +1370,20 @@
         if (singleNote) {
           singleNote.textContent = flourProfile(flourMix.items[0]?.flourProfileId).description;
         }
+      }
+
+      function renderAmbientTemperature() {
+        const selected = ambientTemperatureOption(ambientTemperature);
+        $('#ambient-options').innerHTML = ambientTemperatureOptions.map((option) => `
+          <button type="button" class="ambient-option ${option.id === ambientTemperature ? 'active' : ''}" data-ambient-temperature="${option.id}" aria-label="${option.label}. ${option.description}" aria-pressed="${option.id === ambientTemperature}">
+            <svg class="i" aria-hidden="true"><use href="#${option.icon}" /></svg>
+            <strong>${option.label}</strong>
+          </button>
+        `).join('');
+        $('#ambient-hint').innerHTML = `
+          <p>${selected.timelineHint}</p>
+          ${ambientTemperatureFlourHints().map((hint) => `<p>${hint}</p>`).join('')}
+        `;
       }
 
       function syncFlourMixFromDom() {
@@ -1286,6 +1425,7 @@
         });
         renderFlourMixStatus();
         renderFlourBreakdown();
+        renderAmbientTemperature();
       }
 
       function renderFlourMixEditor() {
@@ -1296,32 +1436,39 @@
         $('.flour-mix-head').hidden = !flourMixOpen;
 
         if (!flourMixOpen) {
-          const profile = flourProfile(flourMix.items[0]?.flourProfileId);
           $('#flour-mix-body').innerHTML = `
             <div class="flour-closed">
-              <p>La farina base è impostata su <strong>${profile.label}</strong>. Vuoi modificare o creare un mix?</p>
-              <button type="button" class="flour-open" data-open-flour-mix>Clicca qui</button>
+              <button type="button" class="flour-open" data-open-flour-mix>Modifica o crea mix</button>
             </div>
           `;
           renderFlourBreakdown();
           return;
         }
 
+        const profile = flourProfile(flourMix.items[0]?.flourProfileId);
+        const openCopy = `
+          <div class="flour-open-copy">
+            <p>La farina base è impostata su <strong>${profile.label}</strong>. Vuoi modificare o creare un mix?</p>
+            <p class="flour-status" id="flour-mix-status"></p>
+          </div>
+        `;
+
         if (flourMix.mode === 'single') {
           const item = flourMix.items[0] || { id: 'flour-1', flourProfileId: '0-bread', percentage: 100 };
           $('#flour-mix-body').innerHTML = `
+            ${openCopy}
             <div class="flour-single">
               <label class="flour-control">Tipo farina
                 <select id="single-flour-profile">${flourProfileOptions()}</select>
               </label>
               <p class="flour-single-note" id="single-flour-note"></p>
               <button type="button" class="flour-add" data-create-mix>+ Crea un mix</button>
-              <button type="button" class="flour-close" data-close-flour-mix>Chiudi</button>
             </div>
           `;
           $('#single-flour-profile').value = item.flourProfileId;
         } else {
           $('#flour-mix-body').innerHTML = `
+            ${openCopy}
             ${flourMix.items.map((item, index) => `
               <div class="flour-row" data-flour-row="${item.id}">
                 <label class="flour-control">Farina ${index + 1}
@@ -1346,8 +1493,6 @@
               </div>
             `).join('')}
             <button type="button" class="flour-add" data-add-flour>+ Aggiungi farina</button>
-            <p class="flour-status" id="flour-mix-status"></p>
-            <button type="button" class="flour-close" data-close-flour-mix>Chiudi</button>
           `;
           flourMix.items.forEach((item) => {
             const row = $(`[data-flour-row="${item.id}"]`);
@@ -1886,6 +2031,14 @@
         refreshFlourMixComputed(true);
       });
 
+      $('#ambient-options').addEventListener('click', (event) => {
+        const button = event.target.closest('[data-ambient-temperature]');
+        if (!button) return;
+        ambientTemperature = button.dataset.ambientTemperature;
+        switchToCustom();
+        renderAmbientTemperature();
+      });
+
       document.querySelectorAll('.form input').forEach((input) => {
         input.addEventListener('input', () => {
           switchToCustom();
@@ -1955,13 +2108,16 @@
           items: [{ id: 'flour-1', flourProfileId: '0-bread', percentage: 100 }],
         };
         flourMixOpen = false;
+        ambientTemperature = 'normal';
         resetUnitModes();
         renderFlourMixEditor();
+        renderAmbientTemperature();
         renderActiveProfile();
         calculate();
       });
 
       renderActiveProfile();
+      renderAmbientTemperature();
       renderFlourMixEditor();
       renderUnitToggles();
       refreshGramValuesFromPercentages();
