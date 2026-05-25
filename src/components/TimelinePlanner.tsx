@@ -17,7 +17,6 @@ import {
   getElapsedMs,
   getTotalDurationMs,
   initialTimer,
-  safeDuration,
   type TimerState,
 } from '../timelineUtils';
 
