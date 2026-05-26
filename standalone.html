@@ -30,7 +30,7 @@
           linear-gradient(180deg, #fbfaf7 0%, var(--flour) 100%);
       }
 
-      button, input { font: inherit; }
+      button, input, select, textarea { font: inherit; }
       button { cursor: pointer; }
 
       .i {
@@ -491,28 +491,16 @@
         font-size: 14px;
       }
 
+      .ambient-option span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
       .ambient-option.active {
         border-color: var(--amber);
         background: var(--amber-soft);
         color: var(--amber);
-      }
-
-      .ambient-hint {
-        margin: 0;
-        border-radius: 9px;
-        background: #f8f7f5;
-        padding: 12px;
-        color: #4f4a44;
-        font-size: 14px;
-        line-height: 1.45;
-      }
-
-      .ambient-hint p {
-        margin: 0;
-      }
-
-      .ambient-hint p + p {
-        margin-top: 8px;
       }
 
       .form {
@@ -824,14 +812,84 @@
         text-transform: uppercase;
       }
 
-      .step-field input {
+      .step-field input,
+      .step-field select,
+      .step-field textarea {
+        width: 100%;
         min-height: 44px;
         border: 1px solid #cfc8bd;
         border-radius: 9px;
         background: #fff;
+        color: var(--ink);
         font-size: 16px;
         letter-spacing: 0;
         text-transform: none;
+        outline: none;
+      }
+
+      .step-field select {
+        padding: 0 12px;
+      }
+
+      .step-field textarea,
+      .step-note {
+        min-height: auto;
+        resize: vertical;
+        padding: 9px 12px;
+      }
+
+      .step-proposal {
+        display: grid;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        padding: 10px 12px;
+        color: #4f4a44;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .step-proposal strong {
+        font-size: 15px;
+      }
+
+      .step-proposal p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .step-proposal details {
+        color: var(--muted);
+      }
+
+      .step-proposal summary {
+        cursor: pointer;
+        color: var(--amber);
+        font-weight: 750;
+      }
+
+      .step-badge {
+        width: fit-content;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .step-badge.amber {
+        background: var(--amber-soft);
+        color: #7a4a00;
+      }
+
+      .step-badge.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+      }
+
+      .step-badge.neutral {
+        background: #f0eeea;
+        color: #5d5750;
       }
 
       .visually-hidden {
@@ -956,9 +1014,7 @@
         margin-top: 18px;
       }
 
-      .timeline-recommendation,
-      .timeline-summary,
-      .timeline-context {
+      .timeline-recommendation {
         margin-bottom: 16px;
         border-radius: 10px;
         padding: 14px;
@@ -971,36 +1027,17 @@
         background: var(--amber-soft);
       }
 
-      .timeline-recommendation h3,
-      .timeline-context h3 {
+      .timeline-recommendation h3 {
         margin: 0 0 6px;
         font-size: 14px;
       }
 
-      .timeline-recommendation p,
-      .timeline-context p {
+      .timeline-recommendation p {
         margin: 6px 0 0;
       }
 
       .timeline-recommendation .secondary-button {
         margin-top: 12px;
-      }
-
-      .timeline-summary {
-        display: grid;
-        gap: 10px;
-        border: 1px solid var(--line);
-        background: #faf9f7;
-      }
-
-      .timeline-summary div {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .timeline-context {
-        background: #faf9f7;
       }
 
       .step-hints {
@@ -1128,7 +1165,7 @@
         .ambient-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .timeline-head { flex-direction: row; align-items: end; justify-content: space-between; }
         .timeline-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .step-row { grid-template-columns: 76px minmax(0, 1fr) 130px 44px; align-items: end; }
+        .step-row { grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
         .timer-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .timer-controls .wide { grid-column: span 2; }
         .timeline-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1145,6 +1182,7 @@
         .timeline-grid { grid-template-columns: minmax(0, .95fr) minmax(420px, .75fr); }
         .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         .timeline-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .step-row { grid-template-columns: 76px minmax(190px, .95fr) minmax(0, 1.2fr) 132px 44px; align-items: start; }
         .guide-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
         .guide { border-left: 1px solid var(--line); padding-left: 20px; }
         .guide:first-child { border-left: 0; padding-left: 0; }
@@ -1225,7 +1263,6 @@
                 </div>
               </div>
               <div class="ambient-options" role="group" aria-label="Temperatura ambiente" id="ambient-options"></div>
-              <div class="ambient-hint" id="ambient-hint"></div>
             </section>
 
             <form class="form">
@@ -1249,7 +1286,7 @@
         <div class="timeline-head">
           <div>
             <h2>Piano di lavorazione</h2>
-            <p class="timeline-subtitle">Crea una timeline progressiva per riposi, pieghe e fermentazione.</p>
+            <p class="timeline-subtitle">Timeline proposta in base al tipo di impasto, agli ingredienti, al mix farine e alla temperatura ambiente. Puoi modificare gli step o aggiungere note custom.</p>
           </div>
           <button class="secondary-button" id="restore-timeline">Ripristina preset</button>
         </div>
@@ -1257,11 +1294,9 @@
         <div class="timeline-grid">
           <div class="timeline-panel">
             <div class="timeline-recommendation" id="timeline-recommendation"></div>
-            <div class="timeline-summary" id="timeline-summary"></div>
-            <div class="timeline-context" id="timeline-context" hidden></div>
             <div class="timeline-presets" id="timeline-presets"></div>
             <div class="steps" id="timeline-steps"></div>
-            <button class="soft-button" id="add-step">+ Aggiungi step</button>
+            <button class="soft-button" id="add-step">+ Aggiungi step custom</button>
           </div>
 
           <aside class="timeline-panel timer-card">
@@ -1325,6 +1360,7 @@
         {
           id: 'cold',
           label: 'Freddo',
+          rangeLabel: '16–20 °C',
           icon: 'i-snow',
           description: 'Ambiente fresco: la fermentazione tende a rallentare.',
           timelineHint: 'Prevedi tempi più lunghi e controlla lo sviluppo dell\'impasto prima di procedere.',
@@ -1332,6 +1368,7 @@
         {
           id: 'normal',
           label: 'Normale',
+          rangeLabel: '21–24 °C',
           icon: 'i-circle',
           description: 'Condizione stabile: usa i tempi base della timeline.',
           timelineHint: 'I preset timeline possono essere usati come riferimento principale.',
@@ -1339,6 +1376,7 @@
         {
           id: 'warm',
           label: 'Caldo',
+          rangeLabel: '25–30 °C',
           icon: 'i-sun',
           description: 'Ambiente caldo: la fermentazione tende ad accelerare.',
           timelineHint: 'Controlla prima l\'impasto: i passaggi potrebbero richiedere meno tempo.',
@@ -1455,17 +1493,13 @@
       }
 
       function renderAmbientTemperature() {
-        const selected = ambientTemperatureOption(ambientTemperature);
         $('#ambient-options').innerHTML = ambientTemperatureOptions.map((option) => `
-          <button type="button" class="ambient-option ${option.id === ambientTemperature ? 'active' : ''}" data-ambient-temperature="${option.id}" aria-label="${option.label}. ${option.description}" aria-pressed="${option.id === ambientTemperature}">
+          <button type="button" class="ambient-option ${option.id === ambientTemperature ? 'active' : ''}" data-ambient-temperature="${option.id}" aria-label="${option.label}, ${option.rangeLabel}. ${option.description}" aria-pressed="${option.id === ambientTemperature}">
             <svg class="i" aria-hidden="true"><use href="#${option.icon}" /></svg>
             <strong>${option.label}</strong>
+            <span>${option.rangeLabel}</span>
           </button>
         `).join('');
-        $('#ambient-hint').innerHTML = `
-          <p>${selected.timelineHint}</p>
-          ${ambientTemperatureFlourHints().map((hint) => `<p>${hint}</p>`).join('')}
-        `;
       }
 
       function syncFlourMixFromDom() {
@@ -1521,11 +1555,9 @@
         if (!flourMixOpen) {
           $('#flour-mix-body').innerHTML = `
             <div class="flour-closed">
-              <p class="flour-status" id="flour-mix-status"></p>
               <button type="button" class="flour-open" data-open-flour-mix>Modifica o crea mix</button>
             </div>
           `;
-          renderFlourMixStatus();
           renderFlourBreakdown();
           return;
         }
@@ -1694,17 +1726,47 @@
         refreshFlourMixComputed(false);
       }
 
+      const timelineStepDefinitions = {
+        autolysis: { type: 'autolysis', label: 'Autolisi', category: 'rest', defaultDurationMinutes: 60, minDurationMinutes: 30, maxDurationMinutes: 120, durationStepMinutes: 15, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Riposo iniziale di farina e acqua, utile per idratare e rilassare l’impasto.' },
+        'initial-rest': { type: 'initial-rest', label: 'Riposo iniziale', category: 'rest', defaultDurationMinutes: 60, minDurationMinutes: 30, maxDurationMinutes: 90, durationStepMinutes: 15, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Primo riposo dopo l’impasto o dopo l’unione degli ingredienti.' },
+        'stretch-fold': { type: 'stretch-fold', label: 'Stretch and fold', category: 'fold', defaultDurationMinutes: 30, minDurationMinutes: 30, maxDurationMinutes: 120, durationStepMinutes: 30, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Pieghe a intervalli regolari per dare struttura a impasti base.' },
+        'coil-fold': { type: 'coil-fold', label: 'Coil fold', category: 'fold', defaultDurationMinutes: 30, minDurationMinutes: 30, maxDurationMinutes: 120, durationStepMinutes: 30, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Pieghe delicate, utili per impasti più idratati.' },
+        lamination: { type: 'lamination', label: 'Laminazione', category: 'fold', defaultDurationMinutes: 30, minDurationMinutes: 15, maxDurationMinutes: 60, durationStepMinutes: 15, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Stesura e ripiegatura dell’impasto per distribuire tensione e inclusioni.' },
+        bulk: { type: 'bulk', label: 'Fermentazione in massa', category: 'fermentation', defaultDurationMinutes: 240, minDurationMinutes: 120, maxDurationMinutes: 480, durationStepMinutes: 30, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Fermentazione principale dell’impasto prima della formatura.' },
+        'pre-shape': { type: 'pre-shape', label: 'Pre-forma', category: 'shaping', defaultDurationMinutes: 20, minDurationMinutes: 10, maxDurationMinutes: 30, durationStepMinutes: 5, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Prima formatura leggera per organizzare la massa.' },
+        'bench-rest': { type: 'bench-rest', label: 'Riposo banco', category: 'shaping', defaultDurationMinutes: 20, minDurationMinutes: 10, maxDurationMinutes: 40, durationStepMinutes: 5, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Riposo breve sul banco prima della forma finale.' },
+        shape: { type: 'shape', label: 'Forma', category: 'shaping', defaultDurationMinutes: 15, minDurationMinutes: 5, maxDurationMinutes: 30, durationStepMinutes: 5, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Forma finale prima dell’appretto o della teglia.' },
+        proof: { type: 'proof', label: 'Appretto', category: 'fermentation', defaultDurationMinutes: 90, minDurationMinutes: 45, maxDurationMinutes: 180, durationStepMinutes: 15, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Lievitazione finale prima della cottura.' },
+        'pan-proof': { type: 'pan-proof', label: 'Lievitazione in teglia', category: 'fermentation', defaultDurationMinutes: 90, minDurationMinutes: 30, maxDurationMinutes: 180, durationStepMinutes: 15, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Lievitazione in teglia, centrale per focacce e impasti morbidi.' },
+        'cold-rest': { type: 'cold-rest', label: 'Riposo in frigo', category: 'cold', defaultDurationMinutes: 720, minDurationMinutes: 480, maxDurationMinutes: 1440, durationStepMinutes: 60, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Maturazione lunga in ambiente freddo.' },
+        bake: { type: 'bake', label: 'Cottura', category: 'bake', defaultDurationMinutes: 45, minDurationMinutes: 20, maxDurationMinutes: 60, durationStepMinutes: 5, isCustom: false, isDurationEditable: true, isLabelEditable: false, description: 'Tempo indicativo di cottura.' },
+        custom: { type: 'custom', label: 'Step custom', category: 'custom', defaultDurationMinutes: 30, minDurationMinutes: 0, maxDurationMinutes: 1440, durationStepMinutes: 5, isCustom: true, isDurationEditable: true, isLabelEditable: true, description: 'Step libero per note e passaggi personali.' },
+      };
+      const predefinedStepTypes = Object.values(timelineStepDefinitions).filter((definition) => !definition.isCustom).map((definition) => definition.type);
+      const createTimelineStep = (type, id, durationMinutes = timelineStepDefinitions[type].defaultDurationMinutes, overrides = {}) => {
+        const definition = timelineStepDefinitions[type];
+        return {
+          ...definition,
+          id,
+          label: overrides.label || definition.label,
+          description: overrides.description || definition.description,
+          durationMinutes,
+          note: overrides.note,
+        };
+      };
+      const createCustomTimelineStep = (id) => createTimelineStep('custom', id, 30, { label: 'Nuovo step' });
+
       const timelinePresets = [
         {
           id: 'basic-same-day',
           label: 'Pane base',
           description: 'Riposo iniziale, pieghe e fermentazione in massa.',
           steps: [
-            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 60 },
-            { id: 'fold-1', label: 'Stretch and fold', durationMinutes: 30 },
-            { id: 'fold-2', label: 'Stretch and fold', durationMinutes: 30 },
-            { id: 'fold-3', label: 'Stretch and fold', durationMinutes: 30 },
-            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 240 },
+            createTimelineStep('initial-rest', 'rest-1', 60),
+            createTimelineStep('stretch-fold', 'fold-1', 30),
+            createTimelineStep('stretch-fold', 'fold-2', 30),
+            createTimelineStep('stretch-fold', 'fold-3', 30),
+            createTimelineStep('bulk', 'bulk', 240),
           ],
         },
         {
@@ -1712,12 +1774,12 @@
           label: 'Alta idratazione',
           description: 'Pieghe più ravvicinate per dare struttura all’impasto.',
           steps: [
-            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 45 },
-            { id: 'coil-1', label: 'Coil fold', durationMinutes: 20 },
-            { id: 'coil-2', label: 'Coil fold', durationMinutes: 20 },
-            { id: 'coil-3', label: 'Coil fold', durationMinutes: 20 },
-            { id: 'coil-4', label: 'Coil fold', durationMinutes: 20 },
-            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 300 },
+            createTimelineStep('autolysis', 'autolysis-1', 60),
+            createTimelineStep('coil-fold', 'coil-1', 30),
+            createTimelineStep('coil-fold', 'coil-2', 30),
+            createTimelineStep('coil-fold', 'coil-3', 30),
+            createTimelineStep('coil-fold', 'coil-4', 30),
+            createTimelineStep('bulk', 'bulk', 300),
           ],
         },
         {
@@ -1725,11 +1787,11 @@
           label: 'Focaccia',
           description: 'Timeline semplice per impasto morbido e lievitazione in teglia.',
           steps: [
-            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 30 },
-            { id: 'fold-1', label: 'Prima piega', durationMinutes: 30 },
-            { id: 'fold-2', label: 'Seconda piega', durationMinutes: 30 },
-            { id: 'bulk', label: 'Prima lievitazione', durationMinutes: 120 },
-            { id: 'pan-proof', label: 'Lievitazione in teglia', durationMinutes: 90 },
+            createTimelineStep('initial-rest', 'rest-1', 45),
+            createTimelineStep('stretch-fold', 'fold-1', 30, { description: 'Prima piega per dare struttura.' }),
+            createTimelineStep('stretch-fold', 'fold-2', 30, { description: 'Seconda piega per sostenere l’impasto.' }),
+            createTimelineStep('bulk', 'bulk', 120),
+            createTimelineStep('pan-proof', 'pan-proof', 90),
           ],
         },
         {
@@ -1737,11 +1799,11 @@
           label: 'Lunga fermentazione',
           description: 'Poche pieghe, poi maturazione lenta.',
           steps: [
-            { id: 'rest-1', label: 'Riposo iniziale', durationMinutes: 60 },
-            { id: 'fold-1', label: 'Prima piega', durationMinutes: 30 },
-            { id: 'fold-2', label: 'Seconda piega', durationMinutes: 30 },
-            { id: 'bulk', label: 'Fermentazione in massa', durationMinutes: 180 },
-            { id: 'cold', label: 'Riposo in frigo', durationMinutes: 720 },
+            createTimelineStep('autolysis', 'autolysis-1', 60),
+            createTimelineStep('stretch-fold', 'fold-1', 30, { description: 'Prima piega prima della fermentazione lunga.' }),
+            createTimelineStep('stretch-fold', 'fold-2', 30, { description: 'Seconda piega prima della maturazione.' }),
+            createTimelineStep('bulk', 'bulk', 180),
+            createTimelineStep('cold-rest', 'cold-rest', 720),
           ],
         },
       ];
@@ -1763,6 +1825,26 @@
       const hasStrongFlours = () => flourMix.items
         .map((item) => flourProfile(item.flourProfileId))
         .some((profile) => profile.strengthLevel === 'very-high' || profile.id === 'manitoba');
+      const profilePresetMap = { base: 'basic-same-day', high: 'high-hydration', focaccia: 'focaccia' };
+      const timelinePreset = (presetId) => timelinePresets.find((preset) => preset.id === presetId) || timelinePresets[0];
+      const clamp = (value, min, max) => Math.min(typeof max === 'number' ? max : 1440, Math.max(typeof min === 'number' ? min : 0, value));
+      const roundToStep = (value, step) => Math.round(value / (step > 0 ? step : 1)) * (step > 0 ? step : 1);
+      const getCurrentInputs = () => ({
+        flourTotal: flourValue,
+        hydration: numberValue('#hydration'),
+        saltPercentage: getFieldPercentage('salt', flourValue),
+        starterPercentage: getFieldPercentage('starter', flourValue),
+        starterHydration: numberValue('#starter-hydration'),
+        oilPercentage: getFieldPercentage('oil', flourValue),
+      });
+      const recommendedPresetId = () => {
+        if (profilePresetMap[activeProfileId]) return profilePresetMap[activeProfileId];
+        const inputs = getCurrentInputs();
+        if (inputs.oilPercentage >= 3) return 'focaccia';
+        if (inputs.hydration >= 76 || hasAbsorbentFlours()) return 'high-hydration';
+        if (hasStrongFlours()) return 'long-fermentation';
+        return 'basic-same-day';
+      };
 
       function getElapsedMs() {
         if (timer.startedAt === null) return 0;
@@ -1802,68 +1884,96 @@
         return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
       }
 
-      function getTimelineRecommendation() {
+      function buildSuggestedTimeline(presetId = selectedTimelinePreset, baseSteps = timelineSteps) {
         const reasons = [];
         const warnings = [];
-        let recommendedPresetId = 'basic-same-day';
-        let confidence = 'medium';
+        const inputs = getCurrentInputs();
+        const recommendation = recommendedPresetId();
+        let confidence = profilePresetMap[activeProfileId] ? 'high' : 'medium';
         const absorbent = hasAbsorbentFlours();
         const strong = hasStrongFlours();
 
         if (activeProfileId === 'focaccia') {
-          recommendedPresetId = 'focaccia';
-          confidence = 'high';
-          reasons.push('Il profilo Focaccia usa una lievitazione in teglia più lineare.');
+          reasons.push('Il profilo Focaccia mette al centro bulk breve e lievitazione in teglia.');
         } else if (activeProfileId === 'high') {
-          recommendedPresetId = 'high-hydration';
-          confidence = 'high';
-          reasons.push('Il profilo Alta idratazione beneficia di pieghe più ravvicinate.');
+          reasons.push('Il profilo Alta idratazione beneficia di coil fold e controllo della struttura.');
         } else if (activeProfileId === 'base') {
-          recommendedPresetId = 'basic-same-day';
-          confidence = 'high';
-          reasons.push('Il profilo Pane base usa la timeline quotidiana come riferimento.');
-        } else if (strong) {
-          recommendedPresetId = 'long-fermentation';
-          reasons.push('La presenza di farina forte può sostenere processi più lunghi.');
-        } else if (absorbent) {
-          recommendedPresetId = 'high-hydration';
-          reasons.push('Il mix contiene farine più assorbenti: osserva l’impasto durante riposi e pieghe.');
+          reasons.push('Il profilo Pane base usa riposi, pieghe e bulk come percorso principale.');
         } else {
-          reasons.push('Per un profilo Custom senza segnali particolari, la timeline base resta il punto di partenza più chiaro.');
+          reasons.push('Il profilo Custom usa ingredienti, farine e temperatura per orientare la timeline.');
         }
 
-        if (ambientTemperature === 'warm') warnings.push('Ambiente caldo: controlla prima l’impasto, i tempi potrebbero accorciarsi.');
-        if (ambientTemperature === 'cold') warnings.push('Ambiente fresco: i tempi potrebbero allungarsi.');
-        if (absorbent && !reasons.some((reason) => reason.includes('assorbenti'))) reasons.push('Il mix contiene farine più assorbenti: osserva l’impasto durante riposi e pieghe.');
+        if (ambientTemperature === 'warm') reasons.push('Ambiente caldo: la proposta riduce o anticipa il controllo degli step fermentativi.');
+        if (ambientTemperature === 'cold') reasons.push('Ambiente fresco: la proposta allunga gli step fermentativi più sensibili.');
+        if (absorbent) reasons.push('Farine assorbenti o integrali: più attenzione a riposi e pieghe.');
+        if (strong) reasons.push('Farine forti/proteiche: possono sostenere processi più lunghi.');
         if (!isFlourMixValid()) {
           confidence = 'low';
-          warnings.push(`Completa il mix farine prima di usare la timeline come riferimento. Ora sei a ${percentLabel(getFlourMixTotalPercentage())}%.`);
+          warnings.push('Completa il mix farine prima di usare la timeline come riferimento.');
         }
 
-        return { recommendedPresetId, confidence, reasons: reasons.slice(0, 3), warnings };
-      }
+        const steps = baseSteps.map((step) => {
+          const stepReasons = [];
+          let delta = 0;
+          let level = 'info';
+          const isFermentation = ['bulk', 'proof', 'pan-proof'].includes(step.type);
+          const isRest = ['autolysis', 'initial-rest'].includes(step.type);
+          const isFold = ['stretch-fold', 'coil-fold', 'lamination'].includes(step.type);
 
-      function isFermentationStep(step) {
-        const label = step.label.toLowerCase();
-        return ['bulk', 'fermentazione', 'lievitazione', 'proof', 'frigo'].some((term) => label.includes(term));
-      }
+          if (ambientTemperature === 'warm' && isFermentation) {
+            delta += step.type === 'bulk' ? -30 : -15;
+            level = 'shorter';
+            stepReasons.push('Ambiente caldo: controlla prima la fermentazione.');
+          }
+          if (ambientTemperature === 'cold' && isFermentation) {
+            delta += step.type === 'bulk' ? 60 : 30;
+            level = 'longer';
+            stepReasons.push('Ambiente fresco: potrebbe servire più tempo.');
+          }
+          if (absorbent && isRest) {
+            delta += step.type === 'autolysis' ? 30 : 15;
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Farine più assorbenti: osserva idratazione e consistenza.');
+          }
+          if (absorbent && isFold) {
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Farine assorbenti o integrali: valuta sviluppo e tenuta durante le pieghe.');
+          }
+          if (inputs.hydration >= 76 && step.type === 'coil-fold') {
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Alta idratazione: meglio lavorare con pieghe delicate e ravvicinate.');
+          }
+          if (inputs.starterPercentage >= 25 && isFermentation && ambientTemperature !== 'cold') {
+            delta -= 15;
+            if (level === 'info') level = 'shorter';
+            stepReasons.push('Starter alto: la fermentazione può partire più rapidamente.');
+          }
+          if (inputs.oilPercentage >= 3 && step.type === 'pan-proof') {
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Focaccia con olio: usa la teglia come riferimento e controlla lo sviluppo.');
+          }
+          if (strong && ['bulk', 'cold-rest'].includes(step.type)) {
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Farina forte/proteica: può sostenere processi più lunghi, controllando sviluppo e tenuta.');
+          }
+          if (step.type === 'cold-rest' && ambientTemperature !== 'normal') {
+            if (level === 'info') level = 'watch';
+            stepReasons.push('Il frigo è un contesto separato: non applico lo stesso effetto della temperatura ambiente.');
+          }
 
-      function isRestOrFoldStep(step) {
-        const label = step.label.toLowerCase();
-        return ['riposo', 'piega', 'fold', 'coil'].some((term) => label.includes(term));
-      }
-
-      function getTimelineAdjustments() {
-        const absorbent = hasAbsorbentFlours();
-        const strong = hasStrongFlours();
-        return timelineSteps.flatMap((step) => {
-          const adjustments = [];
-          if (ambientTemperature === 'warm' && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Controlla prima della fine: ambiente caldo.' });
-          if (ambientTemperature === 'cold' && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Potrebbe richiedere più tempo: ambiente fresco.' });
-          if (absorbent && isRestOrFoldStep(step)) adjustments.push({ stepId: step.id, message: 'Osserva consistenza e assorbimento prima di procedere.' });
-          if (strong && isFermentationStep(step)) adjustments.push({ stepId: step.id, message: 'Buona struttura per processi più lunghi: controlla sviluppo e tenuta.' });
-          return adjustments.slice(0, 2);
+          const suggestedDurationMinutes = step.type === 'custom'
+            ? safeDuration(step.durationMinutes)
+            : clamp(roundToStep(safeDuration(step.durationMinutes) + delta, step.durationStepMinutes), step.minDurationMinutes, step.maxDurationMinutes);
+          return {
+            step,
+            baseDurationMinutes: safeDuration(step.durationMinutes),
+            suggestedDurationMinutes,
+            deltaMinutes: suggestedDurationMinutes - safeDuration(step.durationMinutes),
+            level: stepReasons.length ? level : 'info',
+            reasons: stepReasons,
+          };
         });
+        return { recommendedPresetId: recommendation, confidence, reasons: reasons.slice(0, 4), warnings, steps };
       }
 
       function saveLocalState() {
@@ -1918,42 +2028,89 @@
         $('#local-memory-message').textContent = 'Memoria locale cancellata.';
       }
 
+      const isObject = (value) => typeof value === 'object' && value !== null;
+      const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+      const isValidInputs = (inputs) => isObject(inputs) &&
+        ['flourTotal', 'hydration', 'saltPercentage', 'starterPercentage', 'starterHydration', 'oilPercentage'].every((field) => isFiniteNumber(inputs[field]));
+      const isValidUnitModes = (modes) => isObject(modes) &&
+        ['saltPercentage', 'starterPercentage', 'oilPercentage'].every((field) => modes[field] === '%' || modes[field] === 'g');
+      const isValidGramValues = (values) => isObject(values) &&
+        ['saltPercentage', 'starterPercentage', 'oilPercentage'].every((field) => isFiniteNumber(values[field]));
+      const isValidFlourMix = (mix) => isObject(mix) &&
+        typeof mix.id === 'string' &&
+        typeof mix.name === 'string' &&
+        ['single', 'mix'].includes(mix.mode) &&
+        Array.isArray(mix.items) &&
+        mix.items.length > 0 &&
+        mix.items.every((item) => isObject(item) && typeof item.id === 'string' && typeof item.flourProfileId === 'string' && isFiniteNumber(item.percentage) && item.percentage >= 0 && (item.proteinPercentage === undefined || isFiniteNumber(item.proteinPercentage)));
+      const isValidTimer = (nextTimer) => isObject(nextTimer) &&
+        ['idle', 'running', 'paused', 'finished'].includes(nextTimer.status) &&
+        (nextTimer.startedAt === null || isFiniteNumber(nextTimer.startedAt)) &&
+        (nextTimer.pausedAt === null || isFiniteNumber(nextTimer.pausedAt)) &&
+        isFiniteNumber(nextTimer.accumulatedPauseMs) &&
+        nextTimer.accumulatedPauseMs >= 0;
+      const isValidTimelineStep = (step) => isObject(step) &&
+        typeof step.id === 'string' &&
+        Boolean(timelineStepDefinitions[step.type]) &&
+        typeof step.label === 'string' &&
+        typeof step.category === 'string' &&
+        isFiniteNumber(step.defaultDurationMinutes) &&
+        isFiniteNumber(step.durationMinutes) &&
+        isFiniteNumber(step.durationStepMinutes) &&
+        typeof step.isCustom === 'boolean' &&
+        typeof step.isDurationEditable === 'boolean' &&
+        typeof step.isLabelEditable === 'boolean';
+      const isValidPersistedState = (state) => isObject(state) &&
+        state.version === 1 &&
+        isFiniteNumber(state.savedAt) &&
+        isValidInputs(state.inputs) &&
+        isValidUnitModes(state.unitModes) &&
+        isValidGramValues(state.gramValues) &&
+        typeof state.activeProfileId === 'string' &&
+        typeof state.customProfileName === 'string' &&
+        isValidFlourMix(state.flourMix) &&
+        ['cold', 'normal', 'warm'].includes(state.ambientTemperature) &&
+        isObject(state.timeline) &&
+        typeof state.timeline.selectedPresetId === 'string' &&
+        Array.isArray(state.timeline.steps) &&
+        state.timeline.steps.every(isValidTimelineStep) &&
+        isValidTimer(state.timeline.timer);
+
       function loadLocalState() {
         try {
           const rawValue = window.localStorage.getItem(storageKey);
           if (!rawValue) return;
           const state = JSON.parse(rawValue);
-          if (!state || state.version !== 1) return;
-          const savedUnitModes = state.unitModes || {};
-          const savedGramValues = state.gramValues || {};
-          const savedSaltUnit = savedUnitModes.salt ?? savedUnitModes.saltPercentage ?? '%';
-          const savedStarterUnit = savedUnitModes.starter ?? savedUnitModes.starterPercentage ?? '%';
-          const savedOilUnit = savedUnitModes.oil ?? savedUnitModes.oilPercentage ?? '%';
-          $('#base-value').value = state.inputs?.flourTotal ?? 1000;
-          $('#hydration').value = state.inputs?.hydration ?? 65;
-          $('#salt').value = savedSaltUnit === 'g' ? savedGramValues.salt ?? savedGramValues.saltPercentage ?? 20 : state.inputs?.saltPercentage ?? 2;
-          $('#starter').value = savedStarterUnit === 'g' ? savedGramValues.starter ?? savedGramValues.starterPercentage ?? 200 : state.inputs?.starterPercentage ?? 20;
-          $('#starter-hydration').value = state.inputs?.starterHydration ?? 100;
-          $('#oil').value = savedOilUnit === 'g' ? savedGramValues.oil ?? savedGramValues.oilPercentage ?? 0 : state.inputs?.oilPercentage ?? 0;
+          if (!isValidPersistedState(state)) return;
+          const savedUnitModes = state.unitModes;
+          const savedGramValues = state.gramValues;
+          const savedSaltUnit = savedUnitModes.saltPercentage;
+          const savedStarterUnit = savedUnitModes.starterPercentage;
+          const savedOilUnit = savedUnitModes.oilPercentage;
+          $('#base-value').value = state.inputs.flourTotal;
+          $('#hydration').value = state.inputs.hydration;
+          $('#salt').value = savedSaltUnit === 'g' ? savedGramValues.saltPercentage : state.inputs.saltPercentage;
+          $('#starter').value = savedStarterUnit === 'g' ? savedGramValues.starterPercentage : state.inputs.starterPercentage;
+          $('#starter-hydration').value = state.inputs.starterHydration;
+          $('#oil').value = savedOilUnit === 'g' ? savedGramValues.oilPercentage : state.inputs.oilPercentage;
           unitModes.salt = savedSaltUnit;
           unitModes.starter = savedStarterUnit;
           unitModes.oil = savedOilUnit;
-          gramValues.salt = savedGramValues.salt ?? savedGramValues.saltPercentage ?? 20;
-          gramValues.starter = savedGramValues.starter ?? savedGramValues.starterPercentage ?? 200;
-          gramValues.oil = savedGramValues.oil ?? savedGramValues.oilPercentage ?? 0;
-          activeProfileId = state.activeProfileId ?? 'base';
-          customProfileName = state.customProfileName ?? 'Custom';
-          flourMix = state.flourMix ?? flourMix;
-          ambientTemperature = state.ambientTemperature ?? 'normal';
-          selectedTimelinePreset = state.timeline?.selectedPresetId ?? timelinePresets[0].id;
-          timelineSteps = Array.isArray(state.timeline?.steps) ? state.timeline.steps.map((step) => ({ ...step })) : timelineSteps;
-          timer = state.timeline?.timer ?? timer;
-          if (timer.status === 'running') {
-            timer = { ...timer, status: 'paused', pausedAt: Date.now() };
-            $('#local-memory-message').textContent = 'Timer ripristinato in pausa.';
-          } else {
-            $('#local-memory-message').textContent = 'Stato ripristinato localmente.';
+          gramValues.salt = savedGramValues.saltPercentage;
+          gramValues.starter = savedGramValues.starterPercentage;
+          gramValues.oil = savedGramValues.oilPercentage;
+          activeProfileId = state.activeProfileId;
+          customProfileName = state.customProfileName;
+          flourMix = state.flourMix;
+          ambientTemperature = state.ambientTemperature;
+          selectedTimelinePreset = state.timeline.selectedPresetId;
+          timelineSteps = state.timeline.steps.map((step) => ({ ...step }));
+          timer = { ...state.timeline.timer };
+          if (timer.status === 'running' && getTotalDurationMs(timelineSteps) > 0 && getElapsedMs() >= getTotalDurationMs(timelineSteps)) {
+            timer.status = 'finished';
+            timer.pausedAt = null;
           }
+          $('#local-memory-message').textContent = 'Stato ripristinato localmente.';
         } catch {
           $('#local-memory-message').textContent = 'Stato locale ignorato.';
         }
@@ -1978,6 +2135,25 @@
         timerInterval = window.setInterval(renderTimeline, 1000);
       }
 
+      const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+      const formatMinuteDuration = (minutes) => formatDuration(minutes * 60 * 1000).replace(' 00s', '');
+      const formatDelta = (deltaMinutes) => deltaMinutes > 0 ? `+${deltaMinutes} min` : deltaMinutes < 0 ? `${deltaMinutes} min` : 'controlla';
+      const stepTypeOptions = (selectedType) => `
+        ${predefinedStepTypes.map((type) => `<option value="${type}" ${type === selectedType ? 'selected' : ''}>${timelineStepDefinitions[type].label}</option>`).join('')}
+        <option value="custom" ${selectedType === 'custom' ? 'selected' : ''}>Step custom</option>
+      `;
+      function buildPresetSteps(presetId) {
+        const preset = timelinePreset(presetId);
+        return buildSuggestedTimeline(preset.id, preset.steps.map((step) => ({ ...step }))).steps.map((item) => ({
+          ...item.step,
+          durationMinutes: item.suggestedDurationMinutes,
+        }));
+      }
+
       function renderTimelinePresets() {
         $('#timeline-presets').innerHTML = timelinePresets.map((preset) => `
           <button class="timeline-preset ${preset.id === selectedTimelinePreset ? 'active' : ''}" data-timeline-preset="${preset.id}">
@@ -1988,32 +2164,23 @@
       }
 
       function renderTimelineRecommendation() {
-        const recommendation = getTimelineRecommendation();
-        const preset = timelinePresets.find((item) => item.id === recommendation.recommendedPresetId) || timelinePresets[0];
+        const recommendation = buildSuggestedTimeline();
+        const preset = timelinePreset(recommendation.recommendedPresetId);
+        const notes = [
+          ...recommendation.reasons,
+          ...recommendation.warnings,
+          ...recommendation.steps.flatMap((item) => item.reasons),
+        ].filter((value, index, list) => list.indexOf(value) === index).slice(0, 6);
         $('#timeline-recommendation').innerHTML = `
           <h3>Timeline suggerita</h3>
-          <p>Ti consigliamo: <strong>${preset.label}</strong>. <span>Confidenza: ${recommendation.confidence}.</span></p>
-          ${recommendation.reasons.map((reason) => `<p>${reason}</p>`).join('')}
-          ${recommendation.warnings.map((warning) => `<p><strong>${warning}</strong></p>`).join('')}
-          <button type="button" class="secondary-button" data-apply-recommendation="${preset.id}">Applica suggerimento</button>
+          <p>Ti consigliamo: <strong>${preset.label}</strong>.</p>
+          ${notes.map((note) => `<p>${note}</p>`).join('')}
+          <button type="button" class="secondary-button" data-apply-recommendation="${preset.id}">Applica proposta</button>
         `;
       }
 
       function renderTimelineSummary() {
-        const totalDurationMs = getTotalDurationMs(timelineSteps);
-        const firstStep = timelineSteps[0]?.label || 'Nessuno';
-        const lastStep = timelineSteps[timelineSteps.length - 1]?.label || 'Nessuno';
-        $('#timeline-summary').innerHTML = `
-          <div><span>Durata base</span><strong>${formatDuration(totalDurationMs)}</strong></div>
-          <div><span>Step</span><strong>${timelineSteps.length}</strong></div>
-          <div><span>Primo step</span><strong>${firstStep}</strong></div>
-          <div><span>Ultimo step</span><strong>${lastStep}</strong></div>
-        `;
-        const messages = [...getTimelineRecommendation().warnings, ...getTimelineAdjustments().map((item) => item.message)]
-          .filter((value, index, list) => list.indexOf(value) === index)
-          .slice(0, 3);
-        $('#timeline-context').hidden = messages.length === 0;
-        $('#timeline-context').innerHTML = `<h3>Indicazioni di contesto</h3>${messages.map((message) => `<p>${message}</p>`).join('')}`;
+        renderTimelineRecommendation();
       }
 
       function renderTimelineSteps() {
@@ -2022,11 +2189,12 @@
           return;
         }
 
-        const adjustments = getTimelineAdjustments();
+        const suggestions = buildSuggestedTimeline();
+        const suggestionsById = new Map(suggestions.steps.map((item) => [item.step.id, item]));
         $('#timeline-steps').innerHTML = timelineSteps.map((step, index) => `
           <div class="step-row ${step.id === draggedStepId ? 'dragging' : ''}" data-step-id="${step.id}">
             <div class="step-order">
-              <button class="drag-handle" data-drag-handle type="button" aria-label="Sposta ${step.label.replaceAll('"', '&quot;')}">
+              <button class="drag-handle" data-drag-handle type="button" aria-label="Sposta ${escapeHtml(step.label)}">
                 <svg viewBox="0 0 18 18" aria-hidden="true">
                   <path d="M6 4h.1M12 4h.1M6 9h.1M12 9h.1M6 14h.1M12 14h.1" />
                 </svg>
@@ -2035,16 +2203,29 @@
             </div>
             <label class="step-field compact">
               <span class="visually-hidden">Step</span>
-              <input class="step-label" type="text" value="${step.label.replaceAll('"', '&quot;')}" />
-              <span class="step-hints">
-                ${adjustments.filter((item) => item.stepId === step.id).map((item) => `<span>${item.message}</span>`).join('')}
-              </span>
+              <select class="step-type" aria-label="Tipo step ${index + 1}">${stepTypeOptions(step.type)}</select>
+              ${step.isLabelEditable ? `<input class="step-label" type="text" aria-label="Nome step custom" value="${escapeHtml(step.label)}" />` : ''}
             </label>
+            <div class="step-proposal">
+              ${(() => {
+                const suggestion = suggestionsById.get(step.id);
+                const hasReasons = suggestion && suggestion.reasons.length > 0;
+                const hasDelta = suggestion && suggestion.deltaMinutes !== 0;
+                const badgeClass = suggestion?.level === 'shorter' ? 'blue' : suggestion?.level === 'longer' ? 'amber' : 'neutral';
+                return `
+                  <strong>${formatMinuteDuration(suggestion ? suggestion.suggestedDurationMinutes : step.durationMinutes)}</strong>
+                  ${suggestion && (hasDelta || hasReasons) ? `<span class="step-badge ${badgeClass}">${hasDelta ? formatDelta(suggestion.deltaMinutes) : 'controlla prima'}</span>` : ''}
+                  ${step.description ? `<p>${escapeHtml(step.description)}</p>` : ''}
+                  ${hasReasons ? `<details><summary>Motivo</summary>${suggestion.reasons.map((reason) => `<p>${escapeHtml(reason)}</p>`).join('')}</details>` : ''}
+                  ${step.isCustom ? `<textarea class="step-note" rows="2" placeholder="Nota personale">${escapeHtml(step.note || '')}</textarea>` : ''}
+                `;
+              })()}
+            </div>
             <label class="step-field compact">
               <span class="visually-hidden">Minuti</span>
-              <input class="step-duration" type="number" min="0" step="1" value="${safeDuration(step.durationMinutes)}" />
+              <input class="step-duration" aria-label="Durata in minuti per ${escapeHtml(step.label)}" type="number" min="${step.minDurationMinutes ?? 0}" ${typeof step.maxDurationMinutes === 'number' ? `max="${step.maxDurationMinutes}"` : ''} step="${step.durationStepMinutes}" value="${safeDuration(step.durationMinutes)}" ${step.isDurationEditable ? '' : 'disabled'} />
             </label>
-            <button class="delete-step" aria-label="Elimina ${step.label.replaceAll('"', '&quot;')}">×</button>
+            <button class="delete-step" aria-label="Elimina ${escapeHtml(step.label)}">×</button>
           </div>
         `).join('');
       }
@@ -2106,9 +2287,9 @@
       $('#timeline-presets').addEventListener('click', (event) => {
         const button = event.target.closest('[data-timeline-preset]');
         if (!button) return;
-        const preset = timelinePresets.find((item) => item.id === button.dataset.timelinePreset) || timelinePresets[0];
+        const preset = timelinePreset(button.dataset.timelinePreset);
         selectedTimelinePreset = preset.id;
-        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        timelineSteps = buildPresetSteps(preset.id);
         resetTimer();
         renderTimelineAll();
       });
@@ -2116,9 +2297,9 @@
       $('#timeline-recommendation').addEventListener('click', (event) => {
         const button = event.target.closest('[data-apply-recommendation]');
         if (!button) return;
-        const preset = timelinePresets.find((item) => item.id === button.dataset.applyRecommendation) || timelinePresets[0];
+        const preset = timelinePreset(button.dataset.applyRecommendation);
         selectedTimelinePreset = preset.id;
-        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        timelineSteps = buildPresetSteps(preset.id);
         resetTimer();
         renderTimelineAll();
       });
@@ -2129,10 +2310,23 @@
         const step = timelineSteps.find((item) => item.id === row.dataset.stepId);
         if (!step) return;
         if (event.target.classList.contains('step-label')) step.label = event.target.value;
-        if (event.target.classList.contains('step-duration')) step.durationMinutes = Math.max(Number(event.target.value) || 0, 0);
+        if (event.target.classList.contains('step-duration')) step.durationMinutes = clamp(safeDuration(Number(event.target.value) || 0), step.minDurationMinutes, step.maxDurationMinutes);
+        if (event.target.classList.contains('step-note')) step.note = event.target.value;
         resetTimer();
         renderTimelineSummary();
         renderTimeline();
+      });
+
+      $('#timeline-steps').addEventListener('change', (event) => {
+        const row = event.target.closest('[data-step-id]');
+        if (!row || !event.target.classList.contains('step-type')) return;
+        const nextType = event.target.value;
+        timelineSteps = timelineSteps.map((step) => {
+          if (step.id !== row.dataset.stepId) return step;
+          return nextType === 'custom' ? createCustomTimelineStep(step.id) : createTimelineStep(nextType, step.id);
+        });
+        resetTimer();
+        renderTimelineAll();
       });
 
       $('#timeline-steps').addEventListener('click', (event) => {
@@ -2174,14 +2368,14 @@
       window.addEventListener('pointercancel', finishStepDrag);
 
       $('#add-step').addEventListener('click', () => {
-        timelineSteps.push({ id: `custom-${Date.now()}`, label: 'Nuovo step', durationMinutes: 30 });
+        timelineSteps.push(createCustomTimelineStep(`custom-${Date.now()}`));
         resetTimer();
         renderTimelineAll();
       });
 
       $('#restore-timeline').addEventListener('click', () => {
-        const preset = timelinePresets.find((item) => item.id === selectedTimelinePreset) || timelinePresets[0];
-        timelineSteps = preset.steps.map((step) => ({ ...step }));
+        const preset = timelinePreset(selectedTimelinePreset);
+        timelineSteps = buildPresetSteps(preset.id);
         resetTimer();
         renderTimelineAll();
       });
@@ -2252,7 +2446,6 @@
             item.percentage = percentFromGrams(flourItemGramValue(item), flourValue);
           }
           flourUnitModes[itemId] = nextUnit;
-          switchToCustom();
           renderFlourMixEditor();
           calculate();
           return;
@@ -2276,7 +2469,6 @@
               ],
             };
           }
-          switchToCustom();
           renderFlourMixEditor();
           calculate();
           return;
@@ -2291,7 +2483,6 @@
               { id: `flour-${Date.now()}-1`, flourProfileId: 'manitoba', percentage: 30 },
             ],
           };
-          switchToCustom();
           renderFlourMixEditor();
           calculate();
           return;
@@ -2303,7 +2494,6 @@
             mode: 'mix',
             items: [...flourMix.items, { id: `flour-${Date.now()}`, flourProfileId: '0-bread', percentage: 0 }],
           };
-          switchToCustom();
           renderFlourMixEditor();
           calculate();
           return;
@@ -2315,19 +2505,16 @@
             ...flourMix,
             items: flourMix.items.filter((item) => item.id !== removeButton.dataset.removeFlour),
           };
-          switchToCustom();
           renderFlourMixEditor();
           calculate();
         }
       });
 
       $('#flour-mix-editor').addEventListener('input', () => {
-        switchToCustom();
         refreshFlourMixComputed(true);
       });
 
       $('#flour-mix-editor').addEventListener('change', () => {
-        switchToCustom();
         refreshFlourMixComputed(true);
       });
 
@@ -2335,7 +2522,6 @@
         const button = event.target.closest('[data-ambient-temperature]');
         if (!button) return;
         ambientTemperature = button.dataset.ambientTemperature;
-        switchToCustom();
         renderAmbientTemperature();
         renderTimelineAll();
       });
@@ -2413,7 +2599,7 @@
         flourMixOpen = false;
         ambientTemperature = 'normal';
         selectedTimelinePreset = timelinePresets[0].id;
-        timelineSteps = timelinePresets[0].steps.map((step) => ({ ...step }));
+        timelineSteps = buildPresetSteps(timelinePresets[0].id);
         timer = { status: 'idle', startedAt: null, pausedAt: null, accumulatedPauseMs: 0 };
         stopTimerTick();
         resetUnitModes();
@@ -2437,6 +2623,9 @@
       refreshGramValuesFromPercentages();
       calculate();
       renderTimelineAll();
+      if (timer.status === 'running') {
+        startTimerTick();
+      }
     </script>
   </body>
 </html>

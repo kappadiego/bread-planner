@@ -1,25 +1,18 @@
 import { Circle, Snowflake, Sun, Thermometer } from 'lucide-react';
 import {
   ambientTemperatureOptions,
-  getAmbientTemperatureOption,
   type AmbientTemperatureId,
 } from '../ambientTemperature';
-import { getAmbientTemperatureFlourHints } from '../bakingContext';
-import type { FlourMix } from '../flours';
 
 type AmbientTemperatureSelectorProps = {
   value: AmbientTemperatureId;
-  flourMix: FlourMix;
   onChange: (value: AmbientTemperatureId) => void;
 };
 
 export function AmbientTemperatureSelector({
   value,
-  flourMix,
   onChange,
 }: AmbientTemperatureSelectorProps) {
-  const selectedOption = getAmbientTemperatureOption(value);
-  const contextHints = getAmbientTemperatureFlourHints(value, flourMix);
   const temperatureIcons = {
     cold: Snowflake,
     normal: Circle,
@@ -46,23 +39,15 @@ export function AmbientTemperatureSelector({
                   ? 'border-amber-600 bg-amber-50 text-amber-800 shadow-sm'
                   : 'border-stone-300 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/40'
               }`}
-              aria-label={`${option.label}. ${option.description}`}
+              aria-label={`${option.label}, ${option.rangeLabel}. ${option.description}`}
               aria-pressed={value === option.id}
             >
               <Icon size={25} strokeWidth={1.8} aria-hidden="true" />
               <span className="text-sm font-semibold">{option.label}</span>
+              <span className="text-xs font-medium text-stone-500">{option.rangeLabel}</span>
             </button>
           );
         })}
-      </div>
-
-      <div className="mt-4 rounded-lg bg-stone-50 px-3 py-3 text-sm leading-5 text-stone-700">
-        <p>{selectedOption.timelineHint}</p>
-        {contextHints.map((hint) => (
-          <p key={hint} className="mt-2">
-            {hint}
-          </p>
-        ))}
       </div>
     </section>
   );

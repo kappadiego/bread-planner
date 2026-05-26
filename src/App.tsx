@@ -118,6 +118,7 @@ type InitialAppState = {
   timelineSteps: TimelineStep[];
   timer: TimerState;
   timerRestoreNotice: string | null;
+  wasRestoredFromLocal: boolean;
 };
 
 const createDefaultAppState = (): InitialAppState => ({
@@ -132,6 +133,7 @@ const createDefaultAppState = (): InitialAppState => ({
   timelineSteps: initialTimelineSteps(),
   timer: initialTimelineTimer,
   timerRestoreNotice: null,
+  wasRestoredFromLocal: false,
 });
 
 const createInitialAppState = (): InitialAppState => {
@@ -151,7 +153,8 @@ const createInitialAppState = (): InitialAppState => {
     selectedTimelinePresetId: loadedState.state.timeline.selectedPresetId,
     timelineSteps: cloneTimelineSteps(loadedState.state.timeline.steps),
     timer: loadedState.state.timeline.timer,
-    timerRestoreNotice: loadedState.timerWasRunning ? 'Timer ripristinato in pausa.' : null,
+    timerRestoreNotice: null,
+    wasRestoredFromLocal: true,
   };
 };
 
@@ -169,7 +172,7 @@ function App() {
   const [timer, setTimer] = useState<TimerState>(initialAppState.timer);
   const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
   const [localMemoryMessage, setLocalMemoryMessage] = useState(
-    initialAppState.timerRestoreNotice ? 'Stato ripristinato localmente.' : 'Stato salvato localmente.',
+    initialAppState.wasRestoredFromLocal ? 'Stato ripristinato localmente.' : 'Stato salvato localmente.',
   );
   const skipNextPersistRef = useRef(false);
 
@@ -300,12 +303,10 @@ function App() {
 
   const updateFlourMix = (nextFlourMix: FlourMix) => {
     setFlourMix(nextFlourMix);
-    setActiveProfileId('custom');
   };
 
   const updateAmbientTemperature = (value: AmbientTemperatureId) => {
     setAmbientTemperature(value);
-    setActiveProfileId('custom');
   };
 
   const updateTimelineTimer = (nextTimer: TimerState) => {
@@ -357,7 +358,6 @@ function App() {
 
               <AmbientTemperatureSelector
                 value={ambientTemperature}
-                flourMix={flourMix}
                 onChange={updateAmbientTemperature}
               />
 
@@ -385,6 +385,7 @@ function App() {
 
         <TimelinePlanner
           activeProfileId={activeProfileId}
+          inputs={effectiveInputs}
           flourMix={flourMix}
           ambientTemperature={ambientTemperature}
           selectedPresetId={selectedTimelinePresetId}
@@ -675,9 +676,6 @@ function FlourTotalForm({
         />
       ) : (
         <div className="px-4 py-4">
-          <p className={`mb-3 rounded-lg px-3 py-2 text-sm font-semibold ${isMixValid ? 'bg-green-50 text-proof-700' : 'bg-amber-50 text-amber-900'}`}>
-            {mixStatus}
-          </p>
           <button
             type="button"
             onClick={() => setIsFlourPanelOpen(true)}
