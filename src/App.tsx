@@ -1,5 +1,4 @@
 import {
-  Bookmark,
   CalendarDays,
   CircleHelp,
   CirclePlus,
@@ -11,11 +10,23 @@ import {
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  ArchiveState,
+  ArchiveTab,
+  JournalEntry,
+  JournalSessionData,
+  JournalStatus,
+  RecipeSnapshot,
+  SavedRecipe,
+  SavedTimeline,
+  TimelineSnapshot,
+} from './archiveTypes';
 import {
   defaultAmbientTemperature,
   type AmbientTemperatureId,
 } from './ambientTemperature';
 import { calculateBread, type BreadInputs, roundGram } from './calculations';
+import { ArchivePanel } from './components/ArchivePanel';
 import { AmbientTemperatureSelector } from './components/AmbientTemperatureSelector';
 import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
@@ -43,13 +54,30 @@ import {
   type FlourMix,
 } from './flours';
 import {
+  addJournalEntry,
+  addRecipe,
+  addTimeline,
+  createArchiveId,
+  createJournalSnapshot,
+  deleteJournalEntry,
+  deleteRecipe,
+  deleteTimeline,
+  duplicateRecipe,
+  duplicateTimeline,
+  loadArchive,
+  saveArchive,
+  updateJournalEntry,
+  updateRecipe,
+  updateTimeline,
+} from './archiveStorage';
+import {
   clearPersistedState,
   loadPersistedState,
   savePersistedState,
   type PersistedBreadPlannerState,
 } from './localStorageState';
 import type { TimelineStep } from './timeline';
-import type { TimerState } from './timelineUtils';
+import { getTotalDurationMs, type TimerState } from './timelineUtils';
 
 type IconProps = {
   size?: number;
@@ -104,6 +132,13 @@ const getEffectiveInputs = (
   });
 
   return nextInputs;
+};
+
+const cloneValue = <T,>(value: T): T => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value) as T;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
 };
 
 type InitialAppState = {
@@ -171,6 +206,11 @@ function App() {
   const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>(initialAppState.timelineSteps);
   const [timer, setTimer] = useState<TimerState>(initialAppState.timer);
   const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
+  const [archive, setArchive] = useState<ArchiveState>(loadArchive);
+  const [activeArchiveTab, setActiveArchiveTab] = useState<ArchiveTab>('recipes');
+  const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>();
+  const [activeTimelineId, setActiveTimelineId] = useState<string | undefined>();
+  const [archiveMessage, setArchiveMessage] = useState('');
   const [localMemoryMessage, setLocalMemoryMessage] = useState(
     initialAppState.wasRestoredFromLocal ? 'Stato ripristinato localmente.' : 'Stato salvato localmente.',
   );
@@ -223,6 +263,10 @@ function App() {
     timer,
     unitModes,
   ]);
+
+  useEffect(() => {
+    saveArchive(archive);
+  }, [archive]);
 
   const updateInput = (field: keyof BreadInputs, value: number) => {
     const safeValue = safeNumber(value);
@@ -318,6 +362,403 @@ function App() {
     reset();
   };
 
+  const openArchiveTab = (tab: ArchiveTab) => {
+    setActiveArchiveTab(tab);
+    window.requestAnimationFrame(() => {
+      document.getElementById('archive-local')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const createRecipeSnapshotFromCurrentPlanner = (name: string, notes: string): RecipeSnapshot => ({
+    schemaVersion: 1,
+    name,
+    notes,
+    activeProfileId,
+    customProfileName,
+    inputs: cloneValue(effectiveInputs),
+    flourMix: cloneValue(flourMix),
+    ambientTemperature,
+    calculatedIngredients: cloneValue(results),
+    estimatedDoughWeight: results.estimatedDoughWeight,
+  });
+
+  const createTimelineSnapshotFromCurrentTimeline = (name: string, notes: string): TimelineSnapshot => ({
+    schemaVersion: 1,
+    name,
+    notes,
+    activeProfileId,
+    selectedPresetId: selectedTimelinePresetId,
+    totalDurationMinutes: Math.round(getTotalDurationMs(timelineSteps) / 60000),
+    steps: cloneValue(timelineSteps),
+  });
+
+  const createSavedRecipe = (
+    name: string,
+    notes: string,
+    associatedTimelineId?: string,
+  ): SavedRecipe => {
+    const now = Date.now();
+    return {
+      ...createRecipeSnapshotFromCurrentPlanner(name, notes),
+      id: createArchiveId('recipe'),
+      createdAt: now,
+      updatedAt: now,
+      associatedTimelineId,
+    };
+  };
+
+  const createSavedTimeline = (name: string, notes: string): SavedTimeline => {
+    const now = Date.now();
+    return {
+      ...createTimelineSnapshotFromCurrentTimeline(name, notes),
+      id: createArchiveId('timeline'),
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  const loadRecipeIntoPlanner = (snapshot: RecipeSnapshot) => {
+    setInputs(cloneValue(snapshot.inputs));
+    setUnitModes(initialUnitModes);
+    setGramValues(getGramValues(snapshot.inputs));
+    setFlourMix(cloneValue(snapshot.flourMix));
+    setAmbientTemperature(snapshot.ambientTemperature);
+    setActiveProfileId(snapshot.activeProfileId);
+    setCustomProfileName(snapshot.customProfileName);
+  };
+
+  const loadTimelineIntoPlanner = (snapshot: TimelineSnapshot) => {
+    setSelectedTimelinePresetId(snapshot.selectedPresetId);
+    setTimelineSteps(cloneValue(snapshot.steps));
+    setTimer(initialTimelineTimer);
+    setTimerRestoreNotice(null);
+  };
+
+  const getRecipeSnapshotForJournal = (recipeId?: string) => {
+    const savedRecipe = recipeId ? archive.recipes.find((recipe) => recipe.id === recipeId) : undefined;
+    return savedRecipe ?? createRecipeSnapshotFromCurrentPlanner('Planner corrente', '');
+  };
+
+  const getTimelineSnapshotForJournal = (timelineId?: string) => {
+    const savedTimeline = timelineId ? archive.timelines.find((timeline) => timeline.id === timelineId) : undefined;
+    return savedTimeline ?? createTimelineSnapshotFromCurrentTimeline('Timeline corrente', '');
+  };
+
+  const createJournalEntryFromValues = ({
+    title,
+    date,
+    status,
+    resultLabel,
+    initialNotes,
+    finalNotes,
+    nextAdjustment,
+    sourceRecipeId,
+    sourceTimelineId,
+  }: {
+    title: string;
+    date: string;
+    status: JournalStatus;
+    resultLabel: string;
+    initialNotes: string;
+    finalNotes: string;
+    nextAdjustment: string;
+    sourceRecipeId?: string;
+    sourceTimelineId?: string;
+  }): JournalEntry => {
+    const now = Date.now();
+    const recipeSnapshot = getRecipeSnapshotForJournal(sourceRecipeId);
+    const timelineSnapshot = getTimelineSnapshotForJournal(sourceTimelineId);
+    const snapshots = createJournalSnapshot(recipeSnapshot, timelineSnapshot);
+    const sessionData: JournalSessionData = {
+      ambientTemperature: recipeSnapshot.ambientTemperature,
+      status,
+      initialNotes,
+      finalNotes,
+      resultLabel,
+      nextAdjustment,
+    };
+
+    return {
+      id: createArchiveId('journal'),
+      schemaVersion: 1,
+      createdAt: now,
+      updatedAt: now,
+      title: title.trim() || recipeSnapshot.name || 'Sessione senza titolo',
+      date: date || new Date().toISOString().slice(0, 10),
+      sourceRecipeId,
+      sourceTimelineId,
+      ...snapshots,
+      sessionData,
+    };
+  };
+
+  const saveRecipeToArchive = (name: string, notes: string, associatedTimelineId?: string) => {
+    const recipe = createSavedRecipe(name, notes, associatedTimelineId);
+    setArchive((current) => addRecipe(current, recipe));
+    setActiveRecipeId(recipe.id);
+    setArchiveMessage(`Ricetta salvata: ${recipe.name}.`);
+    openArchiveTab('recipes');
+  };
+
+  const updateActiveRecipe = (name: string, notes: string, associatedTimelineId?: string) => {
+    const existingRecipe = archive.recipes.find((recipe) => recipe.id === activeRecipeId);
+    if (!existingRecipe) {
+      saveRecipeToArchive(name, notes, associatedTimelineId);
+      return;
+    }
+    const updatedRecipe: SavedRecipe = {
+      ...existingRecipe,
+      ...createRecipeSnapshotFromCurrentPlanner(name, notes),
+      associatedTimelineId,
+      updatedAt: Date.now(),
+    };
+    setArchive((current) => updateRecipe(current, updatedRecipe));
+    setArchiveMessage(`Ricetta aggiornata: ${updatedRecipe.name}.`);
+    openArchiveTab('recipes');
+  };
+
+  const saveRecipeAndTimelineToArchive = (name: string, notes: string) => {
+    const timeline = createSavedTimeline(`${name || 'Ricetta'} timeline`, '');
+    const recipe = createSavedRecipe(name, notes, timeline.id);
+    setArchive((current) => addRecipe(addTimeline(current, timeline), recipe));
+    setActiveRecipeId(recipe.id);
+    setActiveTimelineId(timeline.id);
+    setArchiveMessage(`Ricetta e timeline salvate: ${recipe.name}.`);
+    openArchiveTab('recipes');
+  };
+
+  const loadRecipeFromArchive = (recipeId: string) => {
+    const recipe = archive.recipes.find((item) => item.id === recipeId);
+    if (!recipe) {
+      return;
+    }
+    loadRecipeIntoPlanner(recipe);
+    setActiveRecipeId(recipe.id);
+    setArchiveMessage(`Ricetta caricata nel planner: ${recipe.name}.`);
+  };
+
+  const duplicateRecipeInArchive = (recipeId: string) => {
+    setArchive((current) => duplicateRecipe(current, recipeId));
+    setArchiveMessage('Ricetta duplicata.');
+  };
+
+  const deleteRecipeFromArchive = (recipeId: string) => {
+    const recipe = archive.recipes.find((item) => item.id === recipeId);
+    if (!recipe || !window.confirm(`Eliminare la ricetta "${recipe.name}"?`)) {
+      return;
+    }
+    setArchive((current) => deleteRecipe(current, recipeId));
+    if (activeRecipeId === recipeId) {
+      setActiveRecipeId(undefined);
+    }
+    setArchiveMessage('Ricetta eliminata.');
+  };
+
+  const saveTimelineToArchive = (name: string, notes: string) => {
+    const timeline = createSavedTimeline(name, notes);
+    setArchive((current) => addTimeline(current, timeline));
+    setActiveTimelineId(timeline.id);
+    setArchiveMessage(`Timeline salvata: ${timeline.name}.`);
+    openArchiveTab('timelines');
+  };
+
+  const updateActiveTimeline = (name: string, notes: string) => {
+    const existingTimeline = archive.timelines.find((timeline) => timeline.id === activeTimelineId);
+    if (!existingTimeline) {
+      saveTimelineToArchive(name, notes);
+      return;
+    }
+    const updatedTimeline: SavedTimeline = {
+      ...existingTimeline,
+      ...createTimelineSnapshotFromCurrentTimeline(name, notes),
+      updatedAt: Date.now(),
+    };
+    setArchive((current) => updateTimeline(current, updatedTimeline));
+    setArchiveMessage(`Timeline aggiornata: ${updatedTimeline.name}.`);
+    openArchiveTab('timelines');
+  };
+
+  const loadTimelineFromArchive = (timelineId: string) => {
+    const timeline = archive.timelines.find((item) => item.id === timelineId);
+    if (!timeline) {
+      return;
+    }
+    loadTimelineIntoPlanner(timeline);
+    setActiveTimelineId(timeline.id);
+    setArchiveMessage(`Timeline caricata: ${timeline.name}.`);
+  };
+
+  const duplicateTimelineInArchive = (timelineId: string) => {
+    setArchive((current) => duplicateTimeline(current, timelineId));
+    setArchiveMessage('Timeline duplicata.');
+  };
+
+  const deleteTimelineFromArchive = (timelineId: string) => {
+    const timeline = archive.timelines.find((item) => item.id === timelineId);
+    if (!timeline || !window.confirm(`Eliminare la timeline "${timeline.name}"?`)) {
+      return;
+    }
+    setArchive((current) => deleteTimeline(current, timelineId));
+    if (activeTimelineId === timelineId) {
+      setActiveTimelineId(undefined);
+    }
+    setArchiveMessage('Timeline eliminata.');
+  };
+
+  const associateTimelineToRecipe = (timelineId: string, recipeId: string) => {
+    const recipe = archive.recipes.find((item) => item.id === recipeId);
+    if (!recipe) {
+      return;
+    }
+    setArchive((current) => updateRecipe(current, {
+      ...recipe,
+      associatedTimelineId: timelineId,
+      updatedAt: Date.now(),
+    }));
+    setArchiveMessage('Timeline associata alla ricetta.');
+  };
+
+  const createJournalEntry = (values: {
+    title: string;
+    date: string;
+    status: JournalStatus;
+    resultLabel: string;
+    initialNotes: string;
+    finalNotes: string;
+    nextAdjustment: string;
+    sourceRecipeId: string;
+    sourceTimelineId: string;
+  }) => {
+    const entry = createJournalEntryFromValues({
+      ...values,
+      sourceRecipeId: values.sourceRecipeId || undefined,
+      sourceTimelineId: values.sourceTimelineId || undefined,
+    });
+    setArchive((current) => addJournalEntry(current, entry));
+    setArchiveMessage(`Sessione journal salvata: ${entry.title}.`);
+    openArchiveTab('journal');
+  };
+
+  const createJournalFromRecipe = (recipeId: string) => {
+    const recipe = archive.recipes.find((item) => item.id === recipeId);
+    if (!recipe) {
+      return;
+    }
+    const entry = createJournalEntryFromValues({
+      title: recipe.name,
+      date: new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      resultLabel: '',
+      initialNotes: recipe.notes,
+      finalNotes: '',
+      nextAdjustment: '',
+      sourceRecipeId: recipe.id,
+      sourceTimelineId: recipe.associatedTimelineId,
+    });
+    setArchive((current) => addJournalEntry(current, entry));
+    setArchiveMessage(`Sessione creata da ricetta: ${recipe.name}.`);
+    openArchiveTab('journal');
+  };
+
+  const createJournalFromTimeline = (timelineId: string, recipeId?: string) => {
+    const timeline = archive.timelines.find((item) => item.id === timelineId);
+    if (!timeline && timelineId) {
+      return;
+    }
+    const recipe = recipeId ? archive.recipes.find((item) => item.id === recipeId) : undefined;
+    const entry = createJournalEntryFromValues({
+      title: recipe?.name ?? timeline?.name ?? 'Nuova sessione',
+      date: new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      resultLabel: '',
+      initialNotes: recipe?.notes ?? '',
+      finalNotes: '',
+      nextAdjustment: '',
+      sourceRecipeId: recipe?.id,
+      sourceTimelineId: timeline?.id,
+    });
+    setArchive((current) => addJournalEntry(current, entry));
+    setArchiveMessage('Sessione journal creata.');
+    openArchiveTab('journal');
+  };
+
+  const updateJournalInArchive = (entryId: string, values: {
+    title: string;
+    date: string;
+    status: JournalStatus;
+    resultLabel: string;
+    initialNotes: string;
+    finalNotes: string;
+    nextAdjustment: string;
+    sourceRecipeId: string;
+    sourceTimelineId: string;
+  }) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+    const updatedEntry: JournalEntry = {
+      ...entry,
+      title: values.title.trim() || entry.title,
+      date: values.date || entry.date,
+      sourceRecipeId: values.sourceRecipeId || entry.sourceRecipeId,
+      sourceTimelineId: values.sourceTimelineId || entry.sourceTimelineId,
+      updatedAt: Date.now(),
+      sessionData: {
+        ...entry.sessionData,
+        status: values.status,
+        initialNotes: values.initialNotes,
+        finalNotes: values.finalNotes,
+        resultLabel: values.resultLabel,
+        nextAdjustment: values.nextAdjustment,
+      },
+    };
+    setArchive((current) => updateJournalEntry(current, updatedEntry));
+    setArchiveMessage(`Voce journal aggiornata: ${updatedEntry.title}.`);
+  };
+
+  const deleteJournalFromArchive = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry || !window.confirm(`Eliminare la voce journal "${entry.title}"?`)) {
+      return;
+    }
+    setArchive((current) => deleteJournalEntry(current, entryId));
+    setArchiveMessage('Voce journal eliminata.');
+  };
+
+  const loadJournalSnapshotIntoPlanner = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+    loadRecipeIntoPlanner(entry.recipeSnapshot);
+    loadTimelineIntoPlanner(entry.timelineSnapshot);
+    setArchiveMessage(`Snapshot caricato nel planner: ${entry.title}.`);
+  };
+
+  const createNewTrialFromJournal = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+    loadRecipeIntoPlanner(entry.recipeSnapshot);
+    loadTimelineIntoPlanner(entry.timelineSnapshot);
+    const newEntry = createJournalEntryFromValues({
+      title: `${entry.title} nuova prova`,
+      date: new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      resultLabel: '',
+      initialNotes: entry.sessionData.finalNotes,
+      finalNotes: '',
+      nextAdjustment: '',
+      sourceRecipeId: entry.sourceRecipeId,
+      sourceTimelineId: entry.sourceTimelineId,
+    });
+    setArchive((current) => addJournalEntry(current, newEntry));
+    setArchiveMessage(`Nuova prova creata da: ${entry.title}.`);
+    openArchiveTab('journal');
+  };
+
   const customDisplayName = customProfileName.trim() || 'Custom';
 
   const getProfileIcon = (profileId: string): IconComponent => {
@@ -335,51 +776,67 @@ function App() {
       <Header onReset={reset} />
 
       <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <section className="grid gap-7 xl:grid-cols-[minmax(560px,0.98fr)_minmax(520px,0.92fr)] xl:items-start">
-          <div className="rounded-[14px] border border-stone-200 bg-white/82 p-4 shadow-air backdrop-blur sm:p-5">
-            <div className="rounded-[12px] border border-stone-200 bg-white p-4 shadow-inner-soft">
-              <DoughProfileSelector
-                activeProfileId={activeProfileId}
-                customDisplayName={customDisplayName}
-                customProfileName={customProfileName}
-                profiles={doughProfiles}
-                getProfileIcon={getProfileIcon}
-                onSelectProfile={applyProfile}
-                onSelectCustom={selectCustomProfile}
-                onCustomProfileNameChange={setCustomProfileName}
-              />
-
-              <FlourTotalForm
-                flourTotal={effectiveInputs.flourTotal}
-                flourMix={flourMix}
-                onChange={(value) => updateInput('flourTotal', value)}
-                onFlourMixChange={updateFlourMix}
-              />
-
-              <AmbientTemperatureSelector
-                value={ambientTemperature}
-                onChange={updateAmbientTemperature}
-              />
-
-              <CalculatorForm
-                inputs={effectiveInputs}
-                unitModes={unitModes}
-                gramValues={gramValues}
-                onChange={updateInput}
-                onUnitChange={updateUnitMode}
-              />
-
-            </div>
+        <section className="rounded-[14px] border border-stone-200 bg-white/88 p-4 shadow-air backdrop-blur sm:p-5">
+          <div className="mb-5">
+            <h2 className="text-[30px] font-semibold tracking-normal text-ink">Planner</h2>
           </div>
 
-          <div className="grid gap-5">
-            <ResultCards results={results} flourBreakdown={flourBreakdown} />
-            {results.hasNegativeAdditions && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
-                la formula.
+          <div className="grid gap-6">
+            <DoughProfileSelector
+              activeProfileId={activeProfileId}
+              customDisplayName={customDisplayName}
+              customProfileName={customProfileName}
+              profiles={doughProfiles}
+              getProfileIcon={getProfileIcon}
+              onSelectProfile={applyProfile}
+              onSelectCustom={selectCustomProfile}
+              onCustomProfileNameChange={setCustomProfileName}
+            />
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+              <section className="rounded-[12px] border border-stone-200 bg-stone-50/55 p-4 sm:p-5">
+                <div>
+                  <h2 className="text-xl font-semibold text-ink">Pianificatore degli ingredienti</h2>
+                  <p className="mt-1 text-sm leading-5 text-stone-600">
+                    Imposta quantità, idratazione, starter e temperatura.
+                  </p>
+                </div>
+
+                <FlourTotalForm
+                  flourTotal={effectiveInputs.flourTotal}
+                  flourMix={flourMix}
+                  onChange={(value) => updateInput('flourTotal', value)}
+                  onFlourMixChange={updateFlourMix}
+                />
+
+                <AmbientTemperatureSelector
+                  value={ambientTemperature}
+                  onChange={updateAmbientTemperature}
+                />
+
+                <CalculatorForm
+                  inputs={effectiveInputs}
+                  unitModes={unitModes}
+                  gramValues={gramValues}
+                  onChange={updateInput}
+                  onUnitChange={updateUnitMode}
+                />
+              </section>
+
+              <div className="grid gap-3 xl:sticky xl:top-6 xl:self-start">
+                <IngredientsToWeighCard
+                  results={results}
+                  flourBreakdown={flourBreakdown}
+                  onSaveRecipe={() => openArchiveTab('recipes')}
+                />
+                {results.hasNegativeAdditions && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-5 text-amber-900">
+                    Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
+                    la formula.
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </section>
 
@@ -395,6 +852,37 @@ function App() {
           onSelectedPresetIdChange={setSelectedTimelinePresetId}
           onStepsChange={setTimelineSteps}
           onTimerChange={updateTimelineTimer}
+          onSaveTimeline={() => openArchiveTab('timelines')}
+          onStartJournalSession={() => openArchiveTab('journal')}
+        />
+
+        <ArchivePanel
+          archive={archive}
+          activeTab={activeArchiveTab}
+          activeRecipeId={activeRecipeId}
+          activeTimelineId={activeTimelineId}
+          archiveMessage={archiveMessage}
+          onTabChange={setActiveArchiveTab}
+          onFocusRecipeSave={() => openArchiveTab('recipes')}
+          onSaveRecipe={saveRecipeToArchive}
+          onUpdateRecipe={updateActiveRecipe}
+          onSaveRecipeWithTimeline={saveRecipeAndTimelineToArchive}
+          onLoadRecipe={loadRecipeFromArchive}
+          onDuplicateRecipe={duplicateRecipeInArchive}
+          onDeleteRecipe={deleteRecipeFromArchive}
+          onCreateJournalFromRecipe={createJournalFromRecipe}
+          onSaveTimeline={saveTimelineToArchive}
+          onUpdateTimeline={updateActiveTimeline}
+          onLoadTimeline={loadTimelineFromArchive}
+          onDuplicateTimeline={duplicateTimelineInArchive}
+          onDeleteTimeline={deleteTimelineFromArchive}
+          onAssociateTimelineToRecipe={associateTimelineToRecipe}
+          onCreateJournalFromTimeline={createJournalFromTimeline}
+          onCreateJournalEntry={createJournalEntry}
+          onUpdateJournalEntry={updateJournalInArchive}
+          onDeleteJournalEntry={deleteJournalFromArchive}
+          onLoadJournalSnapshot={loadJournalSnapshotIntoPlanner}
+          onCreateTrialFromJournal={createNewTrialFromJournal}
         />
 
         <QuickGuidelines />
@@ -431,7 +919,6 @@ function Header({ onReset }: { onReset: () => void }) {
 
         <nav className="flex flex-wrap items-center gap-4 text-sm font-medium text-stone-700 sm:gap-7">
           <HeaderAction icon={<RotateCcw size={20} />} label="Ripristina" onClick={onReset} />
-          <HeaderAction icon={<Bookmark size={20} />} label="Salva ricetta" disabled />
           <HeaderAction icon={<CircleHelp size={20} />} label="Guida" disabled />
         </nav>
       </div>
@@ -483,37 +970,52 @@ function DoughProfileSelector({
   onSelectCustom: () => void;
   onCustomProfileNameChange: (value: string) => void;
 }) {
+  const profileCopy: Record<string, string> = {
+    base: 'Equilibrato, semplice da gestire.',
+    high: 'Più acqua, impasto più elastico.',
+    focaccia: 'Impasto morbido, olio incluso.',
+  };
+
   return (
-    <section className="mt-5">
+    <section className="rounded-[12px] border border-stone-200 bg-white p-4 sm:p-5">
       <div className="mb-3">
-        <h2 className="text-lg font-semibold text-ink">Scegli il tipo di impasto</h2>
+        <h2 className="text-xl font-semibold text-ink">Scegli il tuo impasto</h2>
         <p className="mt-1 text-sm leading-5 text-stone-600">
-          Parti da un profilo base o crea una formula personalizzata.
+          Parti da un profilo e personalizza la ricetta.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
         {profiles.map((profile) => {
           const Icon = getProfileIcon(profile.id);
+          const isSelected = activeProfileId === profile.id;
           return (
             <button
               key={profile.id}
               type="button"
               onClick={() => onSelectProfile(profile)}
-              className={`flex min-h-[94px] items-start gap-3 rounded-lg border p-4 text-left transition ${
-                activeProfileId === profile.id
-                  ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-sm'
-                  : 'border-stone-300 bg-white text-stone-600 hover:border-amber-300 hover:bg-amber-50/40'
+              className={`flex min-h-[116px] flex-col items-start rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
+                isSelected
+                  ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+                  : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/35'
               }`}
+              aria-pressed={isSelected}
             >
-              <Icon size={25} strokeWidth={1.8} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <span>
-                <span className="block text-base font-semibold">{profile.label}</span>
-                <span className="mt-1 block text-sm leading-5 text-stone-500">{profile.description}</span>
+              <span className={`grid h-9 w-9 place-items-center rounded-full ${
+                isSelected ? 'bg-white text-amber-700 ring-1 ring-amber-200' : 'bg-stone-50 text-stone-700 ring-1 ring-stone-200'
+              }`}>
+                <Icon size={21} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+              <span className="mt-3 block text-base font-semibold text-ink">{profile.label}</span>
+              <span className="mt-1 block text-sm leading-5 text-stone-500">
+                {profileCopy[profile.id] ?? profile.description}
               </span>
             </button>
           );
         })}
+        {(() => {
+          const isSelected = activeProfileId === 'custom';
+          return (
         <div
           role="button"
           tabIndex={0}
@@ -524,15 +1026,20 @@ function DoughProfileSelector({
               onSelectCustom();
             }
           }}
-          className={`flex min-h-[94px] cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
-            activeProfileId === 'custom'
-              ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-sm'
-              : 'border-stone-300 bg-white text-stone-600 hover:border-amber-300 hover:bg-amber-50/40'
+          className={`flex min-h-[116px] cursor-pointer flex-col items-start rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
+            isSelected
+              ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+              : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/35'
           }`}
+          aria-pressed={isSelected}
         >
-          <CirclePlus size={25} strokeWidth={1.8} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1">
-            {activeProfileId === 'custom' ? (
+          <span className={`grid h-9 w-9 place-items-center rounded-full ${
+            isSelected ? 'bg-white text-amber-700 ring-1 ring-amber-200' : 'bg-stone-50 text-stone-700 ring-1 ring-stone-200'
+          }`}>
+            <CirclePlus size={21} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <span className="mt-3 min-w-0 flex-1">
+            {isSelected ? (
               <input
                 type="text"
                 aria-label="Nome profilo custom"
@@ -542,7 +1049,7 @@ function DoughProfileSelector({
                 onFocus={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
                 onChange={(event) => onCustomProfileNameChange(event.currentTarget.value)}
-                className="min-h-9 w-full min-w-0 rounded-lg border border-amber-200 bg-white px-3 text-base font-semibold text-ink outline-none transition placeholder:text-stone-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                className="min-h-10 w-full min-w-0 rounded-lg border border-amber-200 bg-white px-3 text-base font-semibold text-ink outline-none transition placeholder:text-stone-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
               />
             ) : (
               <span className="block text-base font-semibold">{customDisplayName}</span>
@@ -550,6 +1057,8 @@ function DoughProfileSelector({
             <span className="mt-1 block text-sm leading-5 text-stone-500">Crea il tuo profilo.</span>
           </span>
         </div>
+          );
+        })()}
       </div>
     </section>
   );
@@ -615,7 +1124,7 @@ function CalculatorForm({
   ];
 
   return (
-    <form className="mt-6 overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+    <form className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
       {fields.map((field) => (
         <NumberField
           key={field.field}
@@ -656,7 +1165,7 @@ function FlourTotalForm({
     : `Il mix deve arrivare al 100%. Ora sei a ${formatPercent(totalPercentage)}%.`;
 
   return (
-    <form className="mt-6 rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+    <form className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
       <NumberField
         label="Farina"
         unit="g"
@@ -675,7 +1184,7 @@ function FlourTotalForm({
           onClose={() => setIsFlourPanelOpen(false)}
         />
       ) : (
-        <div className="px-4 py-4">
+        <div className="border-t border-stone-200 px-4 py-4">
           <button
             type="button"
             onClick={() => setIsFlourPanelOpen(true)}
@@ -711,7 +1220,7 @@ function NumberField({
   const inputId = `field-${convertibleField ?? label.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
-    <div className="grid gap-3 border-b border-stone-200 px-4 py-3 last:border-b-0 sm:grid-cols-[1fr_260px] sm:items-center">
+    <div className="grid gap-3 border-b border-stone-200 px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center">
       <label htmlFor={inputId} className="flex min-w-0 items-center gap-4 text-base font-semibold text-ink">
         <Icon size={25} strokeWidth={1.85} className="shrink-0 text-stone-900" aria-hidden="true" />
         <span className="min-w-0">{label}</span>
@@ -754,115 +1263,78 @@ function NumberField({
   );
 }
 
-function ResultCards({
+function IngredientsToWeighCard({
   results,
   flourBreakdown,
+  onSaveRecipe,
 }: {
   results: ReturnType<typeof calculateBread>;
   flourBreakdown: FlourBreakdownRow[];
+  onSaveRecipe: () => void;
 }) {
+  const hasFlourMix = flourBreakdown.length > 1;
+  const hasOil = results.oil !== 0;
+
   return (
-    <>
-      <section className="rounded-[12px] border border-stone-200 bg-white p-6 shadow-air ring-1 ring-black/[0.02] border-l-[5px] border-l-proof-600">
-        <div className="mb-5 flex items-center gap-4 text-[24px] font-semibold text-proof-700">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-proof-100 text-proof-700">
-            <BowlIcon size={28} strokeWidth={1.75} aria-hidden="true" />
-          </span>
-          Ingredienti
-        </div>
-        <div className="divide-y divide-stone-200">
-          <ResultRow label="Farina" value={results.flourTotal} />
-          <ResultRow label="Acqua" value={results.waterTotal} />
-          <ResultRow label="Starter" value={results.starter} />
-          <ResultRow label="Sale" value={results.salt} />
-          <ResultRow label="Olio" value={results.oil} />
-          <ResultRow label="Peso impasto stimato" value={results.estimatedDoughWeight} tone="green" weight="regular" />
-        </div>
-      </section>
+    <aside className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-proof-600 bg-white p-4 shadow-air sm:p-5">
+      <div className="mb-4">
+        <h2 className="text-[22px] font-semibold text-ink">Ingredienti da pesare</h2>
+        <p className="mt-1 text-sm leading-5 text-stone-600">Usa questi valori durante la preparazione.</p>
+      </div>
 
-      <ResultCard
-        title="Starter"
-        tone="blue"
-        icon={<BagIcon size={30} strokeWidth={1.75} aria-hidden="true" />}
-        rows={[
-          ['Farina', results.starterFlour],
-          ['Acqua', results.starterWater],
-        ]}
-      />
-
-      <section className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-amber-600 bg-white p-6 shadow-air ring-1 ring-black/[0.02]">
-        <div className="mb-5 flex items-center gap-4 text-[24px] font-semibold text-ink">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-amber-50 text-amber-700">
-            <Wheat size={28} strokeWidth={1.75} aria-hidden="true" />
-          </span>
-          Composizione farine
-        </div>
-        <div className="divide-y divide-stone-200">
-          {flourBreakdown.map((row) => (
-            <div key={row.id} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-baseline sm:gap-4">
-              <span className="min-w-0 text-[18px] font-semibold text-stone-700">{row.label}</span>
-              <span className="text-[20px] font-semibold text-ink">
-                {formatPercent(row.percentage)}% · {formatGram(row.grams)}
-              </span>
-              <span className="text-sm leading-5 text-stone-500 sm:col-span-2">{row.description}</span>
+      <div className="grid gap-3 border-t border-stone-200 pt-4">
+        <div className="grid gap-2">
+          <WeighRow label="Farina" value={results.flourTotal} />
+          {hasFlourMix && (
+            <div className="grid gap-1 rounded-lg bg-stone-50 px-3 py-2">
+              {flourBreakdown.map((row) => (
+                <div key={row.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate text-stone-600">{row.label}</span>
+                  <span className="whitespace-nowrap font-semibold text-stone-800">{formatGram(row.grams)}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      </section>
-    </>
+        <WeighRow label="Acqua" value={results.waterTotal} />
+        <WeighRow label="Starter" value={results.starter} />
+        <WeighRow label="Sale" value={results.salt} />
+        {hasOil && <WeighRow label="Olio" value={results.oil} />}
+      </div>
+
+      <div className="my-3 flex items-baseline justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+        <div className="text-sm font-semibold text-stone-600">Peso impasto stimato</div>
+        <div className="text-xl font-semibold leading-none text-ink">
+          {formatGram(results.estimatedDoughWeight)}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onSaveRecipe}
+        className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
+      >
+        Salva ricetta
+      </button>
+    </aside>
   );
 }
 
-function ResultCard({
-  title,
-  icon,
-  rows,
-  tone,
-}: {
-  title: string;
-  icon: ReactNode;
-  rows: Array<[string, number, boolean?]>;
-  tone: 'amber' | 'blue';
-}) {
-  const toneClasses =
-    tone === 'amber'
-      ? 'border-l-amber-600 text-amber-700 bg-amber-50'
-      : 'border-l-blue-600 text-blue-700 bg-blue-50';
-
-  return (
-    <section className={`rounded-[12px] border border-stone-200 border-l-[5px] bg-white p-6 shadow-air ring-1 ring-black/[0.02] ${toneClasses.split(' ')[0]}`}>
-      <div className={`mb-5 flex items-center gap-4 text-[24px] font-semibold ${tone === 'amber' ? 'text-ink' : 'text-blue-700'}`}>
-        <span className={`grid h-12 w-12 place-items-center rounded-full ${toneClasses.split(' ').slice(1).join(' ')}`}>
-          {icon}
-        </span>
-        {title}
-      </div>
-      <div className="divide-y divide-stone-200">
-        {rows.map(([label, value, highlight]) => (
-          <ResultRow key={label} label={label} value={value} tone={highlight ? 'green' : undefined} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ResultRow({
+function WeighRow({
   label,
   value,
-  tone,
-  weight = 'semibold',
+  subtle = false,
 }: {
   label: string;
   value: number;
-  tone?: 'green';
-  weight?: 'regular' | 'semibold';
+  subtle?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-3 first:pt-0 last:pb-0">
-      <span className={`text-[18px] ${tone === 'green' ? 'text-proof-700' : 'text-stone-700'} ${weight === 'semibold' ? 'font-semibold' : 'font-normal'}`}>
+    <div className="flex items-baseline justify-between gap-3">
+      <span className={`text-sm leading-5 ${subtle ? 'text-stone-500' : 'text-stone-600'}`}>
         {label}
       </span>
-      <span className={`whitespace-nowrap text-[20px] ${weight === 'semibold' ? 'font-semibold' : 'font-normal'} ${tone === 'green' ? 'text-proof-700' : 'text-ink'}`}>
+      <span className={`whitespace-nowrap text-right font-semibold text-ink ${subtle ? 'text-[19px]' : 'text-[22px]'}`}>
         {formatGram(value)}
       </span>
     </div>
@@ -1032,28 +1504,6 @@ function OilIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ariaH
     >
       <path d="M16 5.5c4.2 4.8 7 8.7 7 12.7a7 7 0 0 1-14 0c0-4 2.8-7.9 7-12.7Z" />
       <path d="M13.3 20.4c.7 1.2 1.7 1.8 3.1 1.8" />
-    </svg>
-  );
-}
-
-function BagIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ariaHidden }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden={ariaHidden}
-    >
-      <path d="M10.5 12.5h11L24 26H8l2.5-13.5Z" />
-      <path d="M12.5 12.5c0-3 1.5-5 3.5-5s3.5 2 3.5 5" />
-      <path d="M13.2 18.6c1.8-1.3 3.8-1.3 5.6 0" />
-      <path d="M14.4 22.1h3.2" />
     </svg>
   );
 }

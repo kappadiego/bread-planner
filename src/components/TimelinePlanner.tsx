@@ -2,7 +2,6 @@ import {
   CirclePlus,
   GripVertical,
   Info,
-  ListRestart,
   Pause,
   Play,
   RotateCcw,
@@ -26,7 +25,6 @@ import {
 } from '../timeline';
 import { buildSuggestedTimeline } from '../timelineSuggestions';
 import {
-  formatDuration,
   getCurrentStepInfo,
   getElapsedMs,
   getTotalDurationMs,
@@ -47,9 +45,33 @@ type TimelinePlannerProps = {
   onSelectedPresetIdChange: (presetId: string) => void;
   onStepsChange: (steps: TimelineStep[]) => void;
   onTimerChange: (timer: TimerState) => void;
+  onSaveTimeline?: () => void;
+  onStartJournalSession?: () => void;
 };
 
-const formatMinuteDuration = (minutes: number) => formatDuration(minutes * 60 * 1000).replace(' 00s', '');
+const formatDigitalDuration = (ms: number) => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+};
+
+const formatHumanMinutes = (minutes: number) => {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  return `${remainingMinutes}m`;
+};
+
+const formatHumanDuration = (ms: number) => formatHumanMinutes(Math.round(ms / 60000));
 
 const formatDelta = (deltaMinutes: number) => {
   if (deltaMinutes > 0) {
@@ -59,6 +81,16 @@ const formatDelta = (deltaMinutes: number) => {
     return `${deltaMinutes} min`;
   }
   return 'controlla';
+};
+
+const getPresetShortDescription = (presetId: string, fallback: string) => {
+  const descriptions: Record<string, string> = {
+    'basic-same-day': 'Riposo iniziale e fermentazione in massa.',
+    'high-hydration': 'Pieghe ravvicinate per dare struttura.',
+    focaccia: 'Step semplici per lievitazione in teglia.',
+    'long-fermentation': 'Poche pieghe, maturazione lenta.',
+  };
+  return descriptions[presetId] ?? fallback;
 };
 
 const clampDuration = (value: number, step: TimelineStep) => {
@@ -79,8 +111,10 @@ export function TimelinePlanner({
   onSelectedPresetIdChange,
   onStepsChange,
   onTimerChange,
+  onSaveTimeline,
 }: TimelinePlannerProps) {
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
+  const [appliedSuggestionPresetId, setAppliedSuggestionPresetId] = useState<string | null>(null);
   const draggingStepIdRef = useRef<string | null>(null);
   const [, setNowTick] = useState(0);
 
@@ -120,6 +154,12 @@ export function TimelinePlanner({
       .slice(0, 6),
     [suggestedTimeline],
   );
+  const recommendationSummary = useMemo(() => recommendationNotes.slice(0, 2), [recommendationNotes]);
+  const isSuggestionApplied =
+    appliedSuggestionPresetId === suggestedTimeline.recommendedPresetId &&
+    selectedPresetId === suggestedTimeline.recommendedPresetId;
+  const recommendationCopy =
+    suggestedTimeline.confidence === 'high' ? `Profilo suggerito: ${recommendedPreset.label}` : '';
   const suggestedStepById = useMemo(() => {
     const map = new Map<string, (typeof suggestedTimeline.steps)[number]>();
     suggestedTimeline.steps.forEach((item) => map.set(item.step.id, item));
@@ -164,17 +204,20 @@ export function TimelinePlanner({
 
   const applyPreset = (presetId: string) => {
     const preset = timelinePresets.find((item) => item.id === presetId) ?? timelinePresets[0];
+    setAppliedSuggestionPresetId(null);
     onSelectedPresetIdChange(preset.id);
     onStepsChange(buildPresetSteps(preset.id));
     resetTimer();
   };
 
   const restoreSelectedPreset = () => {
+    setAppliedSuggestionPresetId(null);
     onStepsChange(buildPresetSteps(selectedPreset.id));
     resetTimer();
   };
 
   const applySuggestedTimeline = () => {
+    setAppliedSuggestionPresetId(suggestedTimeline.recommendedPresetId);
     onSelectedPresetIdChange(suggestedTimeline.recommendedPresetId);
     onStepsChange(buildPresetSteps(suggestedTimeline.recommendedPresetId));
     resetTimer();
@@ -312,47 +355,46 @@ export function TimelinePlanner({
 
   return (
     <section className="rounded-[14px] border border-stone-200 bg-white/88 p-4 shadow-air sm:p-5">
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-[24px] font-semibold text-ink">Piano di lavorazione</h2>
-          <p className="mt-1 text-sm leading-6 text-stone-600">
-            Timeline proposta in base al tipo di impasto, agli ingredienti, al mix farine e alla temperatura ambiente.
-            Puoi modificare gli step o aggiungere note custom.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={restoreSelectedPreset}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-700 transition hover:border-amber-300 hover:bg-amber-50"
-        >
-          <ListRestart size={18} aria-hidden="true" />
-          Ripristina preset
-        </button>
+      <div className="mb-5">
+        <h2 className="text-[24px] font-semibold text-ink">Piano di lavorazione</h2>
+        <p className="mt-1 text-sm leading-6 text-stone-600">
+          Organizza gli step, modifica i tempi e usa il timer durante la preparazione.
+        </p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.75fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-[12px] border border-stone-200 bg-white p-4">
-          <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-amber-900">Timeline suggerita</h3>
-                <p className="mt-1 text-sm leading-5 text-stone-700">
-                  Ti consigliamo: <span className="font-semibold text-ink">{recommendedPreset.label}</span>.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={applySuggestedTimeline}
-                className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
-              >
-                Applica proposta
-              </button>
-            </div>
-            <div className="mt-3 grid gap-2 text-sm leading-5 text-stone-700">
-              {recommendationNotes.map((note) => (
-                <p key={note}>{note}</p>
-              ))}
-            </div>
+          <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-3">
+            {isSuggestionApplied ? (
+              <p className="text-sm font-semibold leading-5 text-amber-900">
+                Proposta applicata: {recommendedPreset.label}. Puoi modificare gli step qui sotto.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-amber-900">Timeline consigliata</h3>
+                    {recommendationCopy && (
+                      <p className="mt-1 text-sm leading-5 text-stone-700">{recommendationCopy}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={applySuggestedTimeline}
+                    className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                  >
+                    Applica proposta
+                  </button>
+                </div>
+                {recommendationSummary.length > 0 && (
+                  <div className="mt-3 grid gap-1 text-sm leading-5 text-stone-700">
+                    {recommendationSummary.map((note) => (
+                      <p key={note}>{note}</p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </section>
 
           {timerRestoreNotice && (
@@ -361,20 +403,34 @@ export function TimelinePlanner({
             </p>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-stone-500">Preset</h3>
+            <button
+              type="button"
+              onClick={restoreSelectedPreset}
+              className="text-sm font-semibold text-stone-600 underline-offset-4 transition hover:text-amber-800 hover:underline focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
+            >
+              Ripristina preset
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
             {timelinePresets.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
                 onClick={() => applyPreset(preset.id)}
-                className={`rounded-lg border px-3 py-3 text-left transition ${
+                className={`min-h-[98px] rounded-lg border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
                   selectedPresetId === preset.id
-                    ? 'border-amber-600 bg-amber-50 text-amber-800'
+                    ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-200'
                     : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300'
                 }`}
+                aria-pressed={selectedPresetId === preset.id}
               >
                 <span className="block text-sm font-semibold">{preset.label}</span>
-                <span className="mt-1 block text-xs leading-5 text-stone-500">{preset.description}</span>
+                <span className="mt-1 block text-xs leading-5 text-stone-500">
+                  {getPresetShortDescription(preset.id, preset.description)}
+                </span>
               </button>
             ))}
           </div>
@@ -393,7 +449,7 @@ export function TimelinePlanner({
                   <div
                     key={step.id}
                     data-step-id={step.id}
-                    className={`grid gap-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3 transition lg:grid-cols-[76px_minmax(190px,0.95fr)_minmax(0,1.2fr)_132px_40px] lg:items-start ${
+                    className={`grid gap-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3 transition lg:grid-cols-[72px_minmax(190px,0.95fr)_minmax(0,1fr)_118px_40px] lg:items-start ${
                       draggingStepId === step.id ? 'scale-[0.99] border-amber-300 bg-amber-50/70 shadow-sm' : ''
                     }`}
                   >
@@ -436,10 +492,11 @@ export function TimelinePlanner({
                     </label>
 
                     <div className="grid gap-2">
-                      <div className="min-h-11 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700">
+                      <div className="min-h-11 px-1 py-1 text-sm text-stone-700">
                         <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Durata</span>
                           <span className="font-semibold text-ink">
-                            {suggestion ? formatMinuteDuration(suggestion.suggestedDurationMinutes) : formatMinuteDuration(step.durationMinutes)}
+                            {suggestion ? formatHumanMinutes(suggestion.suggestedDurationMinutes) : formatHumanMinutes(step.durationMinutes)}
                           </span>
                           {suggestion && (hasDelta || hasReasons) && (
                             <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
@@ -460,7 +517,7 @@ export function TimelinePlanner({
                           <details className="mt-2">
                             <summary className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-amber-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100">
                               <Info size={14} aria-hidden="true" />
-                              Motivo
+                              Perché questo step?
                             </summary>
                             <div className="mt-1 grid gap-1 text-xs leading-5 text-stone-600">
                               {suggestion.reasons.map((reason) => (
@@ -484,19 +541,24 @@ export function TimelinePlanner({
 
                     <label className="grid gap-2">
                       <span className="sr-only">Minuti</span>
-                      <input
-                        aria-label={`Durata in minuti per ${step.label}`}
-                        type="number"
-                        min={step.minDurationMinutes ?? 0}
-                        max={step.maxDurationMinutes ?? undefined}
-                        step={step.durationStepMinutes}
-                        value={step.durationMinutes}
-                        disabled={!step.isDurationEditable}
-                        onChange={(event) =>
-                          updateStep(step.id, { durationMinutes: clampDuration(event.currentTarget.valueAsNumber || 0, step) })
-                        }
-                        className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium normal-case tracking-normal text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100 disabled:bg-stone-100 disabled:text-stone-500"
-                      />
+                      <span className="flex min-h-11 overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:border-amber-500 focus-within:ring-4 focus-within:ring-amber-100">
+                        <input
+                          aria-label={`Durata in minuti per ${step.label}`}
+                          type="number"
+                          min={step.minDurationMinutes ?? 0}
+                          max={step.maxDurationMinutes ?? undefined}
+                          step={step.durationStepMinutes}
+                          value={step.durationMinutes}
+                          disabled={!step.isDurationEditable}
+                          onChange={(event) =>
+                            updateStep(step.id, { durationMinutes: clampDuration(event.currentTarget.valueAsNumber || 0, step) })
+                          }
+                          className="min-w-0 flex-1 bg-transparent px-3 text-base font-medium normal-case tracking-normal text-ink outline-none disabled:bg-stone-100 disabled:text-stone-500"
+                        />
+                        <span className="grid w-11 place-items-center border-l border-stone-200 bg-stone-50 text-sm font-semibold text-stone-600">
+                          min
+                        </span>
+                      </span>
                     </label>
                     <button
                       type="button"
@@ -522,20 +584,26 @@ export function TimelinePlanner({
           </button>
         </div>
 
-        <aside className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-amber-600 bg-white p-5 shadow-air">
+        <aside className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-amber-600 bg-white p-5 shadow-air xl:sticky xl:top-6 xl:self-start">
           <div className="mb-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Step attuale</div>
-            <div className="mt-1 text-[24px] font-semibold text-ink">
+            <h3 className="text-[22px] font-semibold text-ink">Timer</h3>
+            <div className="mt-3 text-sm font-medium text-stone-600">Ora sei in</div>
+            <div className="mt-1 text-[20px] font-semibold leading-6 text-ink">
               {timer.status === 'finished'
                 ? 'Timeline completata'
                 : currentStepInfo?.step.label ?? 'Pronta per partire'}
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-lg bg-stone-50 p-4">
-            <Metric label="Tempo rimanente" value={formatDuration(currentStepInfo?.remainingInStepMs ?? 0)} />
+          <div className="grid gap-3 rounded-lg bg-stone-50 p-3">
+            <div>
+              <div className="text-sm font-medium text-stone-600">Manca ancora</div>
+              <div className="mt-1 font-mono text-[28px] font-semibold leading-none text-ink">
+                {formatDigitalDuration(currentStepInfo?.remainingInStepMs ?? 0)}
+              </div>
+            </div>
             <Metric label="Prossimo step" value={nextStep?.label ?? 'Nessun prossimo step'} />
-            <Metric label="Timeline totale" value={`${formatDuration(elapsedMs)} / ${formatDuration(totalDurationMs)}`} />
+            <Metric label="In tutto manca" value={`${formatHumanDuration(elapsedMs)} / ${formatHumanDuration(totalDurationMs)}`} />
           </div>
 
           <div className="mt-5">
@@ -565,7 +633,7 @@ export function TimelinePlanner({
             ) : (
               <button type="button" onClick={start} disabled={!canStart} className="timeline-primary disabled:cursor-not-allowed disabled:opacity-45">
                 <Play size={18} aria-hidden="true" />
-                Avvia timeline
+                Inizia
               </button>
             )}
 
@@ -576,13 +644,23 @@ export function TimelinePlanner({
               className="timeline-secondary disabled:cursor-not-allowed disabled:opacity-45"
             >
               <SkipForward size={18} aria-hidden="true" />
-              Salta step
+              Salta
             </button>
             <button type="button" onClick={resetTimer} className="timeline-secondary sm:col-span-2">
               <RotateCcw size={18} aria-hidden="true" />
               Reset
             </button>
           </div>
+
+          {onSaveTimeline && (
+            <button
+              type="button"
+              onClick={onSaveTimeline}
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
+            >
+              Salva timeline
+            </button>
+          )}
         </aside>
       </div>
     </section>
