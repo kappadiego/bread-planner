@@ -1,6 +1,7 @@
 import type { BreadInputs } from './calculations';
 import type { FlourMix } from './flours';
 import { timelinePresets, type TimelineStep } from './timeline';
+import { initialTimelinePlanning, type TimelinePlanningState } from './timelinePlanning';
 import { initialTimer, type TimerState } from './timelineUtils';
 
 export type InputUnit = 'g' | '%';
@@ -45,3 +46,5 @@ export const cloneTimelineSteps = (steps: TimelineStep[]) => steps.map((step) =>
 export const initialTimelineSteps = () => cloneTimelineSteps(timelinePresets[0].steps);
 
 export const initialTimelineTimer: TimerState = initialTimer;
+
+export const initialPlanning: TimelinePlanningState = initialTimelinePlanning;

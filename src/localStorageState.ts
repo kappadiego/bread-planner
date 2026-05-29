@@ -1,4 +1,5 @@
 import type { AmbientTemperatureId } from './ambientTemperature';
+import type { CurrentJournalDraft, RecipeSnapshot, TimelineSnapshot } from './archiveTypes';
 import type { BreadInputs } from './calculations';
 import type { GramValues, UnitModes } from './defaults';
 import type { FlourMix } from './flours';
@@ -8,6 +9,11 @@ import {
   type TimelineStepCategory,
   type TimelineStepType,
 } from './timeline';
+import {
+  initialTimelinePlanning,
+  type TimelinePlanningMode,
+  type TimelinePlanningState,
+} from './timelinePlanning';
 import { getElapsedMs, getTotalDurationMs, type TimerState, type TimerStatus } from './timelineUtils';
 
 export const BREAD_PLANNER_STORAGE_KEY = 'bread-planner:v1';
@@ -26,7 +32,10 @@ export type PersistedBreadPlannerState = {
     selectedPresetId: string;
     steps: TimelineStep[];
     timer: TimerState;
+    planning?: TimelinePlanningState;
   };
+  currentJournalEntryId?: string;
+  currentJournalDraft?: CurrentJournalDraft;
 };
 
 export type LoadedBreadPlannerState = {
@@ -36,6 +45,8 @@ export type LoadedBreadPlannerState = {
 const convertibleFields = ['saltPercentage', 'starterPercentage', 'oilPercentage'] as const;
 const temperatureIds = ['cold', 'normal', 'warm'] as const;
 const timerStatuses: TimerStatus[] = ['idle', 'running', 'paused', 'finished'];
+const planningModes: TimelinePlanningMode[] = ['now', 'backward'];
+const journalStatuses = ['draft', 'active', 'scheduled', 'completed'] as const;
 const timelineStepTypes = Object.keys(timelineStepDefinitions) as TimelineStepType[];
 const timelineStepCategories = ['rest', 'fold', 'fermentation', 'shaping', 'cold', 'bake', 'custom'] as TimelineStepCategory[];
 
@@ -121,6 +132,51 @@ const isTimerState = (value: unknown): value is TimerState =>
   isFiniteNumber(value.accumulatedPauseMs) &&
   value.accumulatedPauseMs >= 0;
 
+const isTimelinePlanningState = (value: unknown): value is TimelinePlanningState =>
+  isObject(value) &&
+  planningModes.includes(value.mode as TimelinePlanningMode) &&
+  isString(value.targetEndDate) &&
+  isString(value.targetEndTime);
+
+const isRecipeSnapshot = (value: unknown): value is RecipeSnapshot =>
+  isObject(value) &&
+  value.schemaVersion === 1 &&
+  isString(value.name) &&
+  isString(value.notes) &&
+  isString(value.activeProfileId) &&
+  isString(value.customProfileName) &&
+  isBreadInputs(value.inputs) &&
+  isFlourMix(value.flourMix) &&
+  isAmbientTemperature(value.ambientTemperature) &&
+  isObject(value.calculatedIngredients) &&
+  isFiniteNumber(value.estimatedDoughWeight);
+
+const isTimelineSnapshot = (value: unknown): value is TimelineSnapshot =>
+  isObject(value) &&
+  value.schemaVersion === 1 &&
+  isString(value.name) &&
+  isString(value.notes) &&
+  (value.activeProfileId === undefined || isString(value.activeProfileId)) &&
+  isString(value.selectedPresetId) &&
+  isFiniteNumber(value.totalDurationMinutes) &&
+  Array.isArray(value.steps) &&
+  value.steps.every(isTimelineStep);
+
+const isCurrentJournalDraft = (value: unknown): value is CurrentJournalDraft =>
+  isObject(value) &&
+  isString(value.id) &&
+  journalStatuses.includes(value.status as (typeof journalStatuses)[number]) &&
+  isRecipeSnapshot(value.recipeSnapshot) &&
+  (value.timelineSnapshot === undefined || isTimelineSnapshot(value.timelineSnapshot)) &&
+  isAmbientTemperature(value.temperatureSetting) &&
+  isFiniteNumber(value.createdAt) &&
+  isFiniteNumber(value.updatedAt) &&
+  (value.timerState === undefined || isTimerState(value.timerState)) &&
+  (value.planning === undefined || isTimelinePlanningState(value.planning));
+
+const normalizeTimelinePlanning = (value: unknown): TimelinePlanningState =>
+  isTimelinePlanningState(value) ? value : initialTimelinePlanning;
+
 const finishTimerIfElapsed = (timer: TimerState, steps: TimelineStep[]): TimerState => {
   if (timer.status !== 'running') {
     return timer;
@@ -153,7 +209,10 @@ const isPersistedState = (value: unknown): value is PersistedBreadPlannerState =
   isString(value.timeline.selectedPresetId) &&
   Array.isArray(value.timeline.steps) &&
   value.timeline.steps.every(isTimelineStep) &&
-  isTimerState(value.timeline.timer);
+  isTimerState(value.timeline.timer) &&
+  (value.timeline.planning === undefined || isTimelinePlanningState(value.timeline.planning)) &&
+  (value.currentJournalEntryId === undefined || isString(value.currentJournalEntryId)) &&
+  (value.currentJournalDraft === undefined || isCurrentJournalDraft(value.currentJournalDraft));
 
 export const loadPersistedState = (): LoadedBreadPlannerState | null => {
   if (!canUseLocalStorage()) {
@@ -177,6 +236,7 @@ export const loadPersistedState = (): LoadedBreadPlannerState | null => {
         timeline: {
           ...parsed.timeline,
           timer: finishTimerIfElapsed(parsed.timeline.timer, parsed.timeline.steps),
+          planning: normalizeTimelinePlanning(parsed.timeline.planning),
         },
       },
     };

@@ -308,4 +308,12 @@ export const timelinePresets: TimelinePreset[] = [
       createTimelineStep('cold-rest', 'cold-rest', 720),
     ],
   },
+  {
+    id: 'custom',
+    label: 'Custom',
+    description: 'Parti da uno step libero e costruisci il tuo piano.',
+    steps: [
+      createCustomTimelineStep('custom-1'),
+    ],
+  },
 ];

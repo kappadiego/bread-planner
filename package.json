@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "deploy:ftp": "npm run build && rm -rf ftp-upload-breadplanner/assets && rm -f ftp-upload-breadplanner/.DS_Store && cp -R dist/. ftp-upload-breadplanner/",
+    "clean:local": "rm -rf node_modules/.vite node_modules/.tmp && rm -f ./.DS_Store ftp-upload-breadplanner/.DS_Store"
   },
   "dependencies": {
     "react": "^19.0.0",

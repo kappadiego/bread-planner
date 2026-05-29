@@ -2,6 +2,8 @@ import type { AmbientTemperatureId } from './ambientTemperature';
 import type { BreadInputs, BreadResults } from './calculations';
 import type { FlourMix } from './flours';
 import type { TimelineStep } from './timeline';
+import type { TimelinePlanningState } from './timelinePlanning';
+import type { TimerState } from './timelineUtils';
 
 export type ArchiveTab = 'recipes' | 'timelines' | 'journal';
 
@@ -41,7 +43,23 @@ export type SavedRecipe = ArchiveRecordBase & RecipeSnapshot & {
 
 export type SavedTimeline = ArchiveRecordBase & TimelineSnapshot;
 
-export type JournalStatus = 'draft' | 'completed';
+export type JournalStatus = 'draft' | 'active' | 'scheduled' | 'completed';
+
+/**
+ * Legacy shape kept only to migrate local drafts created before journal
+ * sessions became regular diary entries.
+ */
+export type CurrentJournalDraft = {
+  id: string;
+  status: JournalStatus;
+  recipeSnapshot: RecipeSnapshot;
+  timelineSnapshot?: TimelineSnapshot;
+  temperatureSetting: AmbientTemperatureId;
+  createdAt: number;
+  updatedAt: number;
+  timerState?: TimerState;
+  planning?: TimelinePlanningState;
+};
 
 export type JournalSessionData = {
   ambientTemperature: AmbientTemperatureId;
@@ -67,8 +85,10 @@ export type JournalEntry = ArchiveRecordBase & {
   sourceRecipeId?: string;
   sourceTimelineId?: string;
   recipeSnapshot: RecipeSnapshot;
-  timelineSnapshot: TimelineSnapshot;
+  timelineSnapshot?: TimelineSnapshot;
   sessionData: JournalSessionData;
+  timerState?: TimerState;
+  planning?: TimelinePlanningState;
 };
 
 export type ArchiveState = {

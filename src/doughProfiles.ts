@@ -47,7 +47,7 @@ export const doughProfiles: DoughProfile[] = [
     description: 'Impasto morbido, con olio.',
     values: {
       hydration: 75,
-      saltPercentage: 2.2,
+      saltPercentage: 2,
       starterPercentage: 15,
       starterHydration: 100,
       oilPercentage: 4,

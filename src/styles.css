@@ -3,9 +3,28 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1f2522;
-  background: #f8f5ef;
+  --bp-cream: #f9e8d3;
+  --bp-sage: #8ea06d;
+  --bp-crust: #b26837;
+  --bp-wheat: #e0ae63;
+  --bp-ink: #322e2b;
+  --color-background: #fff8ef;
+  --color-surface: #fffdf8;
+  --color-surface-warm: #f9e8d3;
+  --color-primary: #b26837;
+  --color-primary-hover: #925028;
+  --color-secondary: #8ea06d;
+  --color-accent: #e0ae63;
+  --color-text: #322e2b;
+  --color-text-muted: #6f6257;
+  --color-border: rgba(50, 46, 43, 0.14);
+  --color-border-strong: rgba(50, 46, 43, 0.24);
+  --color-focus: rgba(178, 104, 55, 0.24);
+  --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-ui);
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,13 +39,48 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at 12% 0%, rgba(217, 166, 66, 0.10), transparent 28rem),
-    linear-gradient(180deg, #fbfaf7 0%, #f8f5ef 100%);
+    radial-gradient(circle at 12% 0%, rgba(224, 174, 99, 0.16), transparent 29rem),
+    radial-gradient(circle at 100% 18%, rgba(142, 160, 109, 0.12), transparent 24rem),
+    linear-gradient(180deg, #fffaf2 0%, #f8ead9 100%);
 }
 
 button,
 input {
   font: inherit;
+}
+
+.bp-card {
+  border: 1px solid var(--color-border);
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 16px 44px rgba(50, 46, 43, 0.08);
+}
+
+.bp-soft-card {
+  border: 1px solid var(--color-border);
+  background: rgba(249, 232, 211, 0.38);
+}
+
+.bp-doodle-divider {
+  position: relative;
+}
+
+.bp-doodle-divider::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.35rem;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(178, 104, 55, 0.42), transparent);
+  content: "";
+}
+
+.bp-focus {
+  outline: none;
+}
+
+.bp-focus:focus-visible {
+  box-shadow: 0 0 0 4px var(--color-focus);
 }
 
 .timeline-primary {
@@ -35,17 +89,27 @@ input {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
-  background: #b45309;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 700;
   color: white;
-  transition: background-color 150ms ease, opacity 150ms ease;
+  box-shadow: 0 10px 24px rgba(178, 104, 55, 0.22);
+  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease, transform 150ms ease;
 }
 
 .timeline-primary:hover {
-  background: #92400e;
+  border-color: var(--color-primary-hover);
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.timeline-primary:focus-visible,
+.timeline-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--color-focus);
 }
 
 .timeline-secondary {
@@ -54,17 +118,17 @@ input {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border: 1px solid #d6d3d1;
-  border-radius: 0.5rem;
-  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 700;
-  color: #44403c;
+  color: var(--color-text);
   transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .timeline-secondary:hover {
-  border-color: #fbbf24;
-  background: #fffbeb;
+  border-color: rgba(178, 104, 55, 0.42);
+  background: rgba(249, 232, 211, 0.58);
 }

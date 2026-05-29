@@ -1,18 +1,26 @@
 import {
+  BookOpen,
   CalendarDays,
   CircleHelp,
   CirclePlus,
   Clock3,
   Droplets,
+  FilePlus2,
+  FolderOpen,
+  Play,
   RotateCcw,
+  Save,
   Thermometer,
+  Trash2,
   Wheat,
+  X,
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ArchiveState,
   ArchiveTab,
+  CurrentJournalDraft,
   JournalEntry,
   JournalSessionData,
   JournalStatus,
@@ -23,11 +31,11 @@ import type {
 } from './archiveTypes';
 import {
   defaultAmbientTemperature,
+  getAmbientTemperatureOption,
   type AmbientTemperatureId,
 } from './ambientTemperature';
 import { calculateBread, type BreadInputs, roundGram } from './calculations';
 import { ArchivePanel } from './components/ArchivePanel';
-import { AmbientTemperatureSelector } from './components/AmbientTemperatureSelector';
 import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
 import {
@@ -35,6 +43,7 @@ import {
   convertibleFields,
   initialFlourMix,
   initialInputs,
+  initialPlanning,
   initialTimelinePresetId,
   initialTimelineSteps,
   initialTimelineTimer,
@@ -77,7 +86,8 @@ import {
   type PersistedBreadPlannerState,
 } from './localStorageState';
 import type { TimelineStep } from './timeline';
-import { getTotalDurationMs, type TimerState } from './timelineUtils';
+import type { TimelinePlanningState } from './timelinePlanning';
+import { getCurrentStepInfo, getElapsedMs, getTotalDurationMs, type TimerState } from './timelineUtils';
 
 type IconProps = {
   size?: number;
@@ -89,6 +99,8 @@ type IconProps = {
 type IconComponent = ComponentType<IconProps>;
 
 type ActiveProfileId = string;
+type AppView = 'planner' | 'recipes' | 'timelines';
+type PlannerSection = 'planner' | 'times' | 'diary';
 
 type FieldConfig = {
   field: keyof BreadInputs;
@@ -141,6 +153,115 @@ const cloneValue = <T,>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
+const toDateInputValue = (value: number | Date = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDiaryDate = (value: string | number) => {
+  const date = typeof value === 'number' ? new Date(value) : new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return new Intl.DateTimeFormat('it-IT', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+};
+
+const getFallbackJournalTitle = (recipeSnapshot: RecipeSnapshot, createdAt: number) => {
+  const recipeName = recipeSnapshot.name.trim();
+  if (recipeName && recipeName !== 'Prova corrente' && recipeName !== 'Planner corrente') {
+    return recipeName;
+  }
+
+  const customName = recipeSnapshot.customProfileName.trim();
+  if (customName && customName !== 'Custom') {
+    return customName;
+  }
+
+  return `Impasto del ${formatDiaryDate(createdAt)}`;
+};
+
+const statusLabels: Record<JournalStatus, string> = {
+  draft: 'Bozza',
+  active: 'Attiva',
+  scheduled: 'Programmata',
+  completed: 'Completata',
+};
+
+const journalStatusVisuals: Record<JournalStatus, { card: string; badge: string }> = {
+  draft: {
+    card: 'border-l-crust bg-cream/40 ring-crust/10',
+    badge: 'bg-cream text-crust ring-crust/20',
+  },
+  active: {
+    card: 'border-l-crust bg-[#fff7ef] ring-crust/20',
+    badge: 'bg-crust text-white ring-crust/25',
+  },
+  scheduled: {
+    card: 'border-l-wheat bg-wheat/15 ring-wheat/20',
+    badge: 'bg-wheat/35 text-ink ring-wheat/30',
+  },
+  completed: {
+    card: 'border-l-sage bg-sage/15 ring-sage/20',
+    badge: 'bg-sage/20 text-ink ring-sage/30',
+  },
+};
+
+const statusSortRank: Record<JournalStatus, number> = {
+  scheduled: 0,
+  draft: 1,
+  active: 2,
+  completed: 3,
+};
+
+const getJournalDateSortValue = (entry: JournalEntry) => {
+  const parsedDate = new Date(`${entry.date}T00:00:00`).getTime();
+  return Number.isNaN(parsedDate) ? entry.updatedAt : parsedDate;
+};
+
+const sortJournalEntries = (entries: JournalEntry[], currentJournalEntryId?: string) =>
+  [...entries].sort((first, second) => {
+    if (first.id === currentJournalEntryId && second.id !== currentJournalEntryId) {
+      return -1;
+    }
+    if (second.id === currentJournalEntryId && first.id !== currentJournalEntryId) {
+      return 1;
+    }
+
+    const firstRank = statusSortRank[first.sessionData.status] ?? 4;
+    const secondRank = statusSortRank[second.sessionData.status] ?? 4;
+    if (firstRank !== secondRank) {
+      return firstRank - secondRank;
+    }
+
+    const dateDelta = getJournalDateSortValue(second) - getJournalDateSortValue(first);
+    return dateDelta || second.updatedAt - first.updatedAt;
+  });
+
+const createJournalEntryFromLegacyDraft = (draft: CurrentJournalDraft): JournalEntry => ({
+  id: draft.id,
+  schemaVersion: 1,
+  createdAt: draft.createdAt,
+  updatedAt: draft.updatedAt,
+  title: getFallbackJournalTitle(draft.recipeSnapshot, draft.createdAt),
+  date: toDateInputValue(draft.createdAt),
+  recipeSnapshot: cloneValue(draft.recipeSnapshot),
+  timelineSnapshot: draft.timelineSnapshot ? cloneValue(draft.timelineSnapshot) : undefined,
+  timerState: draft.timerState ? cloneValue(draft.timerState) : undefined,
+  planning: draft.planning ? cloneValue(draft.planning) : undefined,
+  sessionData: {
+    ambientTemperature: draft.temperatureSetting,
+    status: draft.status,
+    initialNotes: '',
+    finalNotes: '',
+    resultLabel: '',
+    nextAdjustment: '',
+  },
+});
+
 type InitialAppState = {
   inputs: BreadInputs;
   unitModes: UnitModes;
@@ -152,6 +273,9 @@ type InitialAppState = {
   selectedTimelinePresetId: string;
   timelineSteps: TimelineStep[];
   timer: TimerState;
+  planning: TimelinePlanningState;
+  currentJournalEntryId?: string;
+  legacyCurrentJournalDraft?: CurrentJournalDraft;
   timerRestoreNotice: string | null;
   wasRestoredFromLocal: boolean;
 };
@@ -167,6 +291,9 @@ const createDefaultAppState = (): InitialAppState => ({
   selectedTimelinePresetId: initialTimelinePresetId,
   timelineSteps: initialTimelineSteps(),
   timer: initialTimelineTimer,
+  planning: initialPlanning,
+  currentJournalEntryId: undefined,
+  legacyCurrentJournalDraft: undefined,
   timerRestoreNotice: null,
   wasRestoredFromLocal: false,
 });
@@ -188,6 +315,9 @@ const createInitialAppState = (): InitialAppState => {
     selectedTimelinePresetId: loadedState.state.timeline.selectedPresetId,
     timelineSteps: cloneTimelineSteps(loadedState.state.timeline.steps),
     timer: loadedState.state.timeline.timer,
+    planning: loadedState.state.timeline.planning ?? initialPlanning,
+    currentJournalEntryId: loadedState.state.currentJournalEntryId,
+    legacyCurrentJournalDraft: loadedState.state.currentJournalDraft,
     timerRestoreNotice: null,
     wasRestoredFromLocal: true,
   };
@@ -205,9 +335,17 @@ function App() {
   const [selectedTimelinePresetId, setSelectedTimelinePresetId] = useState(initialAppState.selectedTimelinePresetId);
   const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>(initialAppState.timelineSteps);
   const [timer, setTimer] = useState<TimerState>(initialAppState.timer);
+  const [planning, setPlanning] = useState<TimelinePlanningState>(initialAppState.planning);
+  const [currentJournalEntryId, setCurrentJournalEntryId] = useState<string | undefined>(
+    initialAppState.currentJournalEntryId,
+  );
   const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
   const [archive, setArchive] = useState<ArchiveState>(loadArchive);
   const [activeArchiveTab, setActiveArchiveTab] = useState<ArchiveTab>('recipes');
+  const [activeView, setActiveView] = useState<AppView>('planner');
+  const [activePlannerSection, setActivePlannerSection] = useState<PlannerSection>('planner');
+  const [newRecipeBadge, setNewRecipeBadge] = useState(false);
+  const [newTimelineBadge, setNewTimelineBadge] = useState(false);
   const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>();
   const [activeTimelineId, setActiveTimelineId] = useState<string | undefined>();
   const [archiveMessage, setArchiveMessage] = useState('');
@@ -215,6 +353,7 @@ function App() {
     initialAppState.wasRestoredFromLocal ? 'Stato ripristinato localmente.' : 'Stato salvato localmente.',
   );
   const skipNextPersistRef = useRef(false);
+  const legacyDraftMigratedRef = useRef(false);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
@@ -246,7 +385,9 @@ function App() {
         selectedPresetId: selectedTimelinePresetId,
         steps: timelineSteps,
         timer,
+        planning,
       },
+      currentJournalEntryId,
     };
 
     savePersistedState(stateToPersist);
@@ -255,9 +396,11 @@ function App() {
     activeProfileId,
     ambientTemperature,
     customProfileName,
+    currentJournalEntryId,
     flourMix,
     gramValues,
     inputs,
+    planning,
     selectedTimelinePresetId,
     timelineSteps,
     timer,
@@ -267,6 +410,46 @@ function App() {
   useEffect(() => {
     saveArchive(archive);
   }, [archive]);
+
+  useEffect(() => {
+    if (legacyDraftMigratedRef.current || !initialAppState.legacyCurrentJournalDraft) {
+      return;
+    }
+
+    legacyDraftMigratedRef.current = true;
+    const migratedEntry = createJournalEntryFromLegacyDraft(initialAppState.legacyCurrentJournalDraft);
+    setArchive((current) => {
+      const existingEntry = current.journal.find((entry) => entry.id === migratedEntry.id);
+      if (existingEntry) {
+        return updateJournalEntry(current, {
+          ...existingEntry,
+          ...migratedEntry,
+          title: existingEntry.title || migratedEntry.title,
+          sessionData: {
+            ...migratedEntry.sessionData,
+            ...existingEntry.sessionData,
+          },
+        });
+      }
+      return addJournalEntry(current, migratedEntry);
+    });
+    setCurrentJournalEntryId(migratedEntry.id);
+  }, [initialAppState.legacyCurrentJournalDraft]);
+
+  useEffect(() => {
+    if (activeView === 'planner') {
+      return undefined;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveView('planner');
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [activeView]);
 
   const updateInput = (field: keyof BreadInputs, value: number) => {
     const safeValue = safeNumber(value);
@@ -326,6 +509,8 @@ function App() {
     setSelectedTimelinePresetId(defaultState.selectedTimelinePresetId);
     setTimelineSteps(defaultState.timelineSteps);
     setTimer(defaultState.timer);
+    setPlanning(defaultState.planning);
+    setCurrentJournalEntryId(defaultState.currentJournalEntryId);
     setTimerRestoreNotice(null);
     setActiveProfileId(defaultState.activeProfileId);
     setCustomProfileName(defaultState.customProfileName);
@@ -363,10 +548,26 @@ function App() {
   };
 
   const openArchiveTab = (tab: ArchiveTab) => {
+    if (tab === 'journal') {
+      setActiveArchiveTab('journal');
+      setActivePlannerSection('diary');
+      setActiveView('planner');
+      return;
+    }
+
     setActiveArchiveTab(tab);
-    window.requestAnimationFrame(() => {
-      document.getElementById('archive-local')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    setActiveView(tab);
+    if (tab === 'recipes') {
+      setNewRecipeBadge(false);
+    }
+    if (tab === 'timelines') {
+      setNewTimelineBadge(false);
+    }
+  };
+
+  const openPlanner = () => {
+    setActiveView('planner');
+    setActivePlannerSection('planner');
   };
 
   const createRecipeSnapshotFromCurrentPlanner = (name: string, notes: string): RecipeSnapshot => ({
@@ -417,6 +618,119 @@ function App() {
     };
   };
 
+  const createDraftJournalEntry = (recipeSnapshot: RecipeSnapshot, existingEntry?: JournalEntry): JournalEntry => {
+    const now = Date.now();
+    const createdAt = existingEntry?.createdAt ?? now;
+    return {
+      id: existingEntry?.id ?? createArchiveId('journal'),
+      schemaVersion: 1,
+      createdAt,
+      updatedAt: now,
+      title: existingEntry?.title || getFallbackJournalTitle(recipeSnapshot, createdAt),
+      date: existingEntry?.date || toDateInputValue(createdAt),
+      sourceRecipeId: existingEntry?.sourceRecipeId,
+      sourceTimelineId: existingEntry?.sourceTimelineId,
+      recipeSnapshot: cloneValue(recipeSnapshot),
+      timelineSnapshot: existingEntry?.timelineSnapshot ? cloneValue(existingEntry.timelineSnapshot) : undefined,
+      timerState: existingEntry?.timerState ? cloneValue(existingEntry.timerState) : undefined,
+      planning: existingEntry?.planning ? cloneValue(existingEntry.planning) : undefined,
+      sessionData: {
+        ambientTemperature,
+        status: 'draft',
+        initialNotes: existingEntry?.sessionData.initialNotes ?? '',
+        finalNotes: existingEntry?.sessionData.finalNotes ?? '',
+        resultLabel: existingEntry?.sessionData.resultLabel ?? '',
+        nextAdjustment: existingEntry?.sessionData.nextAdjustment ?? '',
+      },
+    };
+  };
+
+  const continueToTimes = () => {
+    const recipeSnapshot = createRecipeSnapshotFromCurrentPlanner(customDisplayName, '');
+    const existingEntry = currentJournalEntryId
+      ? archive.journal.find((entry) => entry.id === currentJournalEntryId && entry.sessionData.status !== 'completed')
+      : undefined;
+    const entry = createDraftJournalEntry(recipeSnapshot, existingEntry);
+    setArchive((current) => (
+      current.journal.some((journalEntry) => journalEntry.id === entry.id)
+        ? updateJournalEntry(current, entry)
+        : addJournalEntry(current, entry)
+    ));
+    setCurrentJournalEntryId(entry.id);
+    setActivePlannerSection('times');
+  };
+
+  const updateCurrentJournalEntryFromTimeline = (
+    status: Extract<JournalStatus, 'active' | 'scheduled'>,
+    nextTimer?: TimerState,
+    nextPlanning: TimelinePlanningState = planning,
+  ) => {
+    const now = Date.now();
+    const timelineSnapshot = createTimelineSnapshotFromCurrentTimeline('Piano corrente', '');
+    const existingEntry = currentJournalEntryId
+      ? archive.journal.find((entry) => entry.id === currentJournalEntryId && entry.sessionData.status !== 'completed')
+      : undefined;
+    const baseEntry = existingEntry ?? createDraftJournalEntry(
+      createRecipeSnapshotFromCurrentPlanner(customDisplayName, ''),
+    );
+    const updatedEntry: JournalEntry = {
+      ...baseEntry,
+      updatedAt: now,
+      timelineSnapshot: cloneValue(timelineSnapshot),
+      timerState: nextTimer ? cloneValue(nextTimer) : baseEntry.timerState,
+      planning: cloneValue(nextPlanning),
+      sessionData: {
+        ...baseEntry.sessionData,
+        ambientTemperature,
+        status,
+      },
+    };
+    setArchive((current) => (
+      current.journal.some((journalEntry) => journalEntry.id === updatedEntry.id)
+        ? updateJournalEntry(current, updatedEntry)
+        : addJournalEntry(current, updatedEntry)
+    ));
+    setCurrentJournalEntryId(updatedEntry.id);
+    setActivePlannerSection('diary');
+    setActiveView('planner');
+  };
+
+  const saveJournalRecipeToArchive = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+    const now = Date.now();
+    const recipe: SavedRecipe = {
+      ...cloneValue(entry.recipeSnapshot),
+      id: createArchiveId('recipe'),
+      createdAt: now,
+      updatedAt: now,
+    };
+    setArchive((current) => addRecipe(current, recipe));
+    setActiveRecipeId(recipe.id);
+    setArchiveMessage(`Ricetta salvata dalla prova: ${entry.title}.`);
+    setNewRecipeBadge(true);
+  };
+
+  const saveJournalTimelineToArchive = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry?.timelineSnapshot) {
+      return;
+    }
+    const now = Date.now();
+    const timeline: SavedTimeline = {
+      ...cloneValue(entry.timelineSnapshot),
+      id: createArchiveId('timeline'),
+      createdAt: now,
+      updatedAt: now,
+    };
+    setArchive((current) => addTimeline(current, timeline));
+    setActiveTimelineId(timeline.id);
+    setArchiveMessage(`Piano salvato dalla prova: ${entry.title}.`);
+    setNewTimelineBadge(true);
+  };
+
   const loadRecipeIntoPlanner = (snapshot: RecipeSnapshot) => {
     setInputs(cloneValue(snapshot.inputs));
     setUnitModes(initialUnitModes);
@@ -440,8 +754,10 @@ function App() {
   };
 
   const getTimelineSnapshotForJournal = (timelineId?: string) => {
-    const savedTimeline = timelineId ? archive.timelines.find((timeline) => timeline.id === timelineId) : undefined;
-    return savedTimeline ?? createTimelineSnapshotFromCurrentTimeline('Timeline corrente', '');
+    if (!timelineId) {
+      return undefined;
+    }
+    return archive.timelines.find((timeline) => timeline.id === timelineId);
   };
 
   const createJournalEntryFromValues = ({
@@ -483,7 +799,7 @@ function App() {
       schemaVersion: 1,
       createdAt: now,
       updatedAt: now,
-      title: title.trim() || recipeSnapshot.name || 'Sessione senza titolo',
+      title: title.trim() || recipeSnapshot.name || 'Prova senza titolo',
       date: date || new Date().toISOString().slice(0, 10),
       sourceRecipeId,
       sourceTimelineId,
@@ -496,8 +812,10 @@ function App() {
     const recipe = createSavedRecipe(name, notes, associatedTimelineId);
     setArchive((current) => addRecipe(current, recipe));
     setActiveRecipeId(recipe.id);
-    setArchiveMessage(`Ricetta salvata: ${recipe.name}.`);
-    openArchiveTab('recipes');
+    setArchiveMessage('Ricetta salvata. La trovi in Ricette, nell\'header.');
+    setNewRecipeBadge(true);
+    setActiveArchiveTab('recipes');
+    setActiveView('recipes');
   };
 
   const updateActiveRecipe = (name: string, notes: string, associatedTimelineId?: string) => {
@@ -514,7 +832,8 @@ function App() {
     };
     setArchive((current) => updateRecipe(current, updatedRecipe));
     setArchiveMessage(`Ricetta aggiornata: ${updatedRecipe.name}.`);
-    openArchiveTab('recipes');
+    setActiveArchiveTab('recipes');
+    setActiveView('recipes');
   };
 
   const saveRecipeAndTimelineToArchive = (name: string, notes: string) => {
@@ -523,8 +842,11 @@ function App() {
     setArchive((current) => addRecipe(addTimeline(current, timeline), recipe));
     setActiveRecipeId(recipe.id);
     setActiveTimelineId(timeline.id);
-    setArchiveMessage(`Ricetta e timeline salvate: ${recipe.name}.`);
-    openArchiveTab('recipes');
+    setArchiveMessage('Ricetta salvata. La trovi in Ricette, nell\'header.');
+    setNewRecipeBadge(true);
+    setNewTimelineBadge(true);
+    setActiveArchiveTab('recipes');
+    setActiveView('recipes');
   };
 
   const loadRecipeFromArchive = (recipeId: string) => {
@@ -535,6 +857,8 @@ function App() {
     loadRecipeIntoPlanner(recipe);
     setActiveRecipeId(recipe.id);
     setArchiveMessage(`Ricetta caricata nel planner: ${recipe.name}.`);
+    setActivePlannerSection('planner');
+    setActiveView('planner');
   };
 
   const duplicateRecipeInArchive = (recipeId: string) => {
@@ -558,8 +882,10 @@ function App() {
     const timeline = createSavedTimeline(name, notes);
     setArchive((current) => addTimeline(current, timeline));
     setActiveTimelineId(timeline.id);
-    setArchiveMessage(`Timeline salvata: ${timeline.name}.`);
-    openArchiveTab('timelines');
+    setArchiveMessage('Timeline salvata. La trovi in Timeline, nell\'header.');
+    setNewTimelineBadge(true);
+    setActiveArchiveTab('timelines');
+    setActiveView('timelines');
   };
 
   const updateActiveTimeline = (name: string, notes: string) => {
@@ -575,7 +901,8 @@ function App() {
     };
     setArchive((current) => updateTimeline(current, updatedTimeline));
     setArchiveMessage(`Timeline aggiornata: ${updatedTimeline.name}.`);
-    openArchiveTab('timelines');
+    setActiveArchiveTab('timelines');
+    setActiveView('timelines');
   };
 
   const loadTimelineFromArchive = (timelineId: string) => {
@@ -586,6 +913,8 @@ function App() {
     loadTimelineIntoPlanner(timeline);
     setActiveTimelineId(timeline.id);
     setArchiveMessage(`Timeline caricata: ${timeline.name}.`);
+    setActivePlannerSection('times');
+    setActiveView('planner');
   };
 
   const duplicateTimelineInArchive = (timelineId: string) => {
@@ -635,8 +964,11 @@ function App() {
       sourceTimelineId: values.sourceTimelineId || undefined,
     });
     setArchive((current) => addJournalEntry(current, entry));
-    setArchiveMessage(`Sessione journal salvata: ${entry.title}.`);
-    openArchiveTab('journal');
+    setCurrentJournalEntryId(entry.id);
+    setArchiveMessage('Prova salvata nel Diario.');
+    setActiveArchiveTab('journal');
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const createJournalFromRecipe = (recipeId: string) => {
@@ -656,8 +988,11 @@ function App() {
       sourceTimelineId: recipe.associatedTimelineId,
     });
     setArchive((current) => addJournalEntry(current, entry));
-    setArchiveMessage(`Sessione creata da ricetta: ${recipe.name}.`);
-    openArchiveTab('journal');
+    setCurrentJournalEntryId(entry.id);
+    setArchiveMessage(`Prova creata da ricetta: ${recipe.name}.`);
+    setActiveArchiveTab('journal');
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const createJournalFromTimeline = (timelineId: string, recipeId?: string) => {
@@ -667,7 +1002,7 @@ function App() {
     }
     const recipe = recipeId ? archive.recipes.find((item) => item.id === recipeId) : undefined;
     const entry = createJournalEntryFromValues({
-      title: recipe?.name ?? timeline?.name ?? 'Nuova sessione',
+      title: recipe?.name ?? timeline?.name ?? 'Nuova prova',
       date: new Date().toISOString().slice(0, 10),
       status: 'draft',
       resultLabel: '',
@@ -678,8 +1013,11 @@ function App() {
       sourceTimelineId: timeline?.id,
     });
     setArchive((current) => addJournalEntry(current, entry));
-    setArchiveMessage('Sessione journal creata.');
-    openArchiveTab('journal');
+    setCurrentJournalEntryId(entry.id);
+    setArchiveMessage('Prova salvata nel Diario.');
+    setActiveArchiveTab('journal');
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const updateJournalInArchive = (entryId: string, values: {
@@ -714,16 +1052,19 @@ function App() {
       },
     };
     setArchive((current) => updateJournalEntry(current, updatedEntry));
-    setArchiveMessage(`Voce journal aggiornata: ${updatedEntry.title}.`);
+    setArchiveMessage(`Prova aggiornata: ${updatedEntry.title}.`);
   };
 
   const deleteJournalFromArchive = (entryId: string) => {
     const entry = archive.journal.find((item) => item.id === entryId);
-    if (!entry || !window.confirm(`Eliminare la voce journal "${entry.title}"?`)) {
+    if (!entry || !window.confirm(`Eliminare la prova "${entry.title}"?`)) {
       return;
     }
     setArchive((current) => deleteJournalEntry(current, entryId));
-    setArchiveMessage('Voce journal eliminata.');
+    if (currentJournalEntryId === entryId) {
+      setCurrentJournalEntryId(undefined);
+    }
+    setArchiveMessage('Prova eliminata.');
   };
 
   const loadJournalSnapshotIntoPlanner = (entryId: string) => {
@@ -732,8 +1073,36 @@ function App() {
       return;
     }
     loadRecipeIntoPlanner(entry.recipeSnapshot);
-    loadTimelineIntoPlanner(entry.timelineSnapshot);
+    if (entry.timelineSnapshot) {
+      loadTimelineIntoPlanner(entry.timelineSnapshot);
+    }
     setArchiveMessage(`Snapshot caricato nel planner: ${entry.title}.`);
+    setActivePlannerSection('planner');
+    setActiveView('planner');
+  };
+
+  const loadJournalRecipeIntoPlanner = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+    loadRecipeIntoPlanner(entry.recipeSnapshot);
+    setArchiveMessage(`Ingredienti caricati nel planner: ${entry.title}.`);
+    setActivePlannerSection('planner');
+    setActiveView('planner');
+  };
+
+  const loadJournalTimelineIntoPlanner = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry?.timelineSnapshot) {
+      setArchiveMessage('Questa prova non ha ancora un piano da caricare.');
+      return;
+    }
+    loadTimelineIntoPlanner(entry.timelineSnapshot);
+    setAmbientTemperature(entry.sessionData.ambientTemperature);
+    setArchiveMessage(`Tempi caricati: ${entry.title}.`);
+    setActivePlannerSection('times');
+    setActiveView('planner');
   };
 
   const createNewTrialFromJournal = (entryId: string) => {
@@ -742,21 +1111,36 @@ function App() {
       return;
     }
     loadRecipeIntoPlanner(entry.recipeSnapshot);
-    loadTimelineIntoPlanner(entry.timelineSnapshot);
-    const newEntry = createJournalEntryFromValues({
+    if (entry.timelineSnapshot) {
+      loadTimelineIntoPlanner(entry.timelineSnapshot);
+    }
+    const now = Date.now();
+    const newEntry: JournalEntry = {
+      id: createArchiveId('journal'),
+      schemaVersion: 1,
+      createdAt: now,
+      updatedAt: now,
       title: `${entry.title} nuova prova`,
-      date: new Date().toISOString().slice(0, 10),
-      status: 'draft',
-      resultLabel: '',
-      initialNotes: entry.sessionData.finalNotes,
-      finalNotes: '',
-      nextAdjustment: '',
+      date: toDateInputValue(now),
       sourceRecipeId: entry.sourceRecipeId,
       sourceTimelineId: entry.sourceTimelineId,
-    });
+      recipeSnapshot: cloneValue(entry.recipeSnapshot),
+      timelineSnapshot: entry.timelineSnapshot ? cloneValue(entry.timelineSnapshot) : undefined,
+      sessionData: {
+        ...entry.sessionData,
+        status: 'draft',
+        initialNotes: entry.sessionData.finalNotes,
+        finalNotes: '',
+        resultLabel: '',
+        nextAdjustment: '',
+      },
+    };
     setArchive((current) => addJournalEntry(current, newEntry));
+    setCurrentJournalEntryId(newEntry.id);
     setArchiveMessage(`Nuova prova creata da: ${entry.title}.`);
-    openArchiveTab('journal');
+    setActiveArchiveTab('journal');
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const customDisplayName = customProfileName.trim() || 'Custom';
@@ -773,153 +1157,912 @@ function App() {
 
   return (
     <main className="min-h-screen bg-flour text-ink">
-      <Header onReset={reset} />
+      <Header
+        activeView={activeView}
+        recipesCount={archive.recipes.length}
+        timelinesCount={archive.timelines.length}
+        newRecipeBadge={newRecipeBadge}
+        newTimelineBadge={newTimelineBadge}
+        onOpenPlanner={openPlanner}
+        onOpenRecipes={() => openArchiveTab('recipes')}
+        onOpenTimelines={() => openArchiveTab('timelines')}
+        onReset={reset}
+      />
 
-      <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <section className="rounded-[14px] border border-stone-200 bg-white/88 p-4 shadow-air backdrop-blur sm:p-5">
-          <div className="mb-5">
-            <h2 className="text-[30px] font-semibold tracking-normal text-ink">Planner</h2>
-          </div>
+      <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+        <section className="rounded-[24px] border border-[#322e2b18] bg-[#fffdf8]/92 shadow-air backdrop-blur">
+          <MainFlowTabs
+            activeSection={activePlannerSection}
+            onChange={setActivePlannerSection}
+          />
 
-          <div className="grid gap-6">
-            <DoughProfileSelector
-              activeProfileId={activeProfileId}
-              customDisplayName={customDisplayName}
-              customProfileName={customProfileName}
-              profiles={doughProfiles}
-              getProfileIcon={getProfileIcon}
-              onSelectProfile={applyProfile}
-              onSelectCustom={selectCustomProfile}
-              onCustomProfileNameChange={setCustomProfileName}
-            />
+          <div className="border-t border-[#322e2b18] bg-[#fffdf8] p-3 sm:p-5">
+            {activePlannerSection === 'planner' ? (
+          <section className="grid gap-5">
+            <div className="mb-5">
+              <h2 className="font-display text-[30px] font-semibold tracking-normal text-ink">Scegli il tuo impasto</h2>
+            </div>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
-              <section className="rounded-[12px] border border-stone-200 bg-stone-50/55 p-4 sm:p-5">
-                <div>
-                  <h2 className="text-xl font-semibold text-ink">Pianificatore degli ingredienti</h2>
-                  <p className="mt-1 text-sm leading-5 text-stone-600">
-                    Imposta quantità, idratazione, starter e temperatura.
-                  </p>
-                </div>
+            <div className="grid gap-6">
+              <DoughProfileSelector
+                activeProfileId={activeProfileId}
+                customDisplayName={customDisplayName}
+                customProfileName={customProfileName}
+                profiles={doughProfiles}
+                getProfileIcon={getProfileIcon}
+                onSelectProfile={applyProfile}
+                onSelectCustom={selectCustomProfile}
+                onCustomProfileNameChange={setCustomProfileName}
+                onLoadRecipe={() => openArchiveTab('recipes')}
+              />
 
-                <FlourTotalForm
-                  flourTotal={effectiveInputs.flourTotal}
-                  flourMix={flourMix}
-                  onChange={(value) => updateInput('flourTotal', value)}
-                  onFlourMixChange={updateFlourMix}
-                />
-
-                <AmbientTemperatureSelector
-                  value={ambientTemperature}
-                  onChange={updateAmbientTemperature}
-                />
-
-                <CalculatorForm
-                  inputs={effectiveInputs}
-                  unitModes={unitModes}
-                  gramValues={gramValues}
-                  onChange={updateInput}
-                  onUnitChange={updateUnitMode}
-                />
-              </section>
-
-              <div className="grid gap-3 xl:sticky xl:top-6 xl:self-start">
-                <IngredientsToWeighCard
-                  results={results}
-                  flourBreakdown={flourBreakdown}
-                  onSaveRecipe={() => openArchiveTab('recipes')}
-                />
-                {results.hasNegativeAdditions && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-5 text-amber-900">
-                    Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
-                    la formula.
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+                <section className="bp-soft-card rounded-[18px] p-4 sm:p-5">
+                  <div>
+                    <h2 className="text-xl font-semibold text-ink">Pianificatore degli ingredienti</h2>
+                    <p className="mt-1 text-sm leading-5 text-[#6f6257]">
+                      Imposta quantità, idratazione, starter e olio.
+                    </p>
                   </div>
-                )}
+
+                  <FlourTotalForm
+                    flourTotal={effectiveInputs.flourTotal}
+                    flourMix={flourMix}
+                    onChange={(value) => updateInput('flourTotal', value)}
+                    onFlourMixChange={updateFlourMix}
+                  />
+
+                  <CalculatorForm
+                    inputs={effectiveInputs}
+                    unitModes={unitModes}
+                    gramValues={gramValues}
+                    onChange={updateInput}
+                    onUnitChange={updateUnitMode}
+                  />
+                </section>
+
+                <div className="grid gap-3 xl:sticky xl:top-6 xl:self-start">
+                  <IngredientsToWeighCard
+                    results={results}
+                    flourBreakdown={flourBreakdown}
+                    onSaveRecipe={() => openArchiveTab('recipes')}
+                    onContinueToTimes={continueToTimes}
+                  />
+                  {results.hasNegativeAdditions && (
+                    <div className="rounded-2xl border border-wheat-200 bg-wheat-50 px-4 py-3 text-sm font-medium leading-5 text-ink">
+                      Controlla le percentuali: lo starter contiene più farina o acqua di quanta ne richieda
+                      la formula.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+          </section>
+            ) : activePlannerSection === 'times' ? (
+          <TimelinePlanner
+            activeProfileId={activeProfileId}
+            inputs={effectiveInputs}
+            flourMix={flourMix}
+            ambientTemperature={ambientTemperature}
+            selectedPresetId={selectedTimelinePresetId}
+            steps={timelineSteps}
+            timer={timer}
+            planning={planning}
+            timerRestoreNotice={timerRestoreNotice}
+            onSelectedPresetIdChange={setSelectedTimelinePresetId}
+            onStepsChange={setTimelineSteps}
+            onTimerChange={updateTimelineTimer}
+            onPlanningChange={setPlanning}
+            onAmbientTemperatureChange={updateAmbientTemperature}
+            onOpenTimelines={() => openArchiveTab('timelines')}
+            onSaveTimeline={() => openArchiveTab('timelines')}
+            onStartTimelineNow={(nextTimer) => updateCurrentJournalEntryFromTimeline('active', nextTimer)}
+            onProgramTimeline={(nextPlanning) => updateCurrentJournalEntryFromTimeline('scheduled', undefined, nextPlanning)}
+          />
+            ) : (
+          <DiaryPanel
+            archive={archive}
+            archiveMessage={archiveMessage}
+            currentJournalEntryId={currentJournalEntryId}
+            timer={timer}
+            onUpdateJournalEntry={updateJournalInArchive}
+            onDeleteJournalEntry={deleteJournalFromArchive}
+            onLoadJournalSnapshot={loadJournalSnapshotIntoPlanner}
+            onLoadJournalRecipe={loadJournalRecipeIntoPlanner}
+            onLoadJournalTimeline={loadJournalTimelineIntoPlanner}
+            onCreateTrialFromJournal={createNewTrialFromJournal}
+            onResumeSession={() => setActivePlannerSection('times')}
+            onSaveJournalRecipe={saveJournalRecipeToArchive}
+            onSaveJournalTimeline={saveJournalTimelineToArchive}
+          />
+            )}
           </div>
         </section>
 
-        <TimelinePlanner
-          activeProfileId={activeProfileId}
-          inputs={effectiveInputs}
-          flourMix={flourMix}
-          ambientTemperature={ambientTemperature}
-          selectedPresetId={selectedTimelinePresetId}
-          steps={timelineSteps}
-          timer={timer}
-          timerRestoreNotice={timerRestoreNotice}
-          onSelectedPresetIdChange={setSelectedTimelinePresetId}
-          onStepsChange={setTimelineSteps}
-          onTimerChange={updateTimelineTimer}
-          onSaveTimeline={() => openArchiveTab('timelines')}
-          onStartJournalSession={() => openArchiveTab('journal')}
-        />
+        {activePlannerSection !== 'diary' && <QuickGuidelines />}
 
-        <ArchivePanel
-          archive={archive}
-          activeTab={activeArchiveTab}
-          activeRecipeId={activeRecipeId}
-          activeTimelineId={activeTimelineId}
-          archiveMessage={archiveMessage}
-          onTabChange={setActiveArchiveTab}
-          onFocusRecipeSave={() => openArchiveTab('recipes')}
-          onSaveRecipe={saveRecipeToArchive}
-          onUpdateRecipe={updateActiveRecipe}
-          onSaveRecipeWithTimeline={saveRecipeAndTimelineToArchive}
-          onLoadRecipe={loadRecipeFromArchive}
-          onDuplicateRecipe={duplicateRecipeInArchive}
-          onDeleteRecipe={deleteRecipeFromArchive}
-          onCreateJournalFromRecipe={createJournalFromRecipe}
-          onSaveTimeline={saveTimelineToArchive}
-          onUpdateTimeline={updateActiveTimeline}
-          onLoadTimeline={loadTimelineFromArchive}
-          onDuplicateTimeline={duplicateTimelineInArchive}
-          onDeleteTimeline={deleteTimelineFromArchive}
-          onAssociateTimelineToRecipe={associateTimelineToRecipe}
-          onCreateJournalFromTimeline={createJournalFromTimeline}
-          onCreateJournalEntry={createJournalEntry}
-          onUpdateJournalEntry={updateJournalInArchive}
-          onDeleteJournalEntry={deleteJournalFromArchive}
-          onLoadJournalSnapshot={loadJournalSnapshotIntoPlanner}
-          onCreateTrialFromJournal={createNewTrialFromJournal}
-        />
-
-        <QuickGuidelines />
-
-        <div className="flex flex-col items-center justify-center gap-3 text-center text-sm text-stone-500 sm:flex-row">
+        <div className="flex flex-col items-center justify-center gap-3 text-center text-sm text-[#6f6257] sm:flex-row">
           <p>
             Le quantità sono calcolate con arrotondamento al grammo. {localMemoryMessage}
           </p>
           <button
             type="button"
             onClick={clearLocalMemory}
-            className="min-h-9 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-ink"
+            className="bp-focus min-h-9 rounded-full border border-[#322e2b24] bg-white/80 px-3 text-sm font-semibold text-[#6f6257] transition hover:border-crust/40 hover:bg-cream/55 hover:text-ink"
           >
             Cancella memoria locale
           </button>
         </div>
       </div>
+
+      {activeView !== 'planner' && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-[#322e2b]/38 px-3 py-4 backdrop-blur-[2px] sm:px-6 sm:py-8"
+          role="presentation"
+          onMouseDown={openPlanner}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              activeArchiveTab === 'recipes'
+                  ? 'Ricette'
+                  : 'Timeline'
+            }
+            className="relative mx-auto w-full max-w-[1320px]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={openPlanner}
+              className="bp-focus absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-[#322e2b24] bg-white text-[#6f6257] shadow-air transition hover:border-crust/40 hover:bg-cream/60 hover:text-ink"
+              aria-label="Chiudi pannello"
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+            <ArchivePanel
+              archive={archive}
+              activeTab={activeArchiveTab}
+              activeRecipeId={activeRecipeId}
+              activeTimelineId={activeTimelineId}
+              archiveMessage={archiveMessage}
+              onTabChange={openArchiveTab}
+              onSaveRecipe={saveRecipeToArchive}
+              onUpdateRecipe={updateActiveRecipe}
+              onSaveRecipeWithTimeline={saveRecipeAndTimelineToArchive}
+              onLoadRecipe={loadRecipeFromArchive}
+              onDuplicateRecipe={duplicateRecipeInArchive}
+              onDeleteRecipe={deleteRecipeFromArchive}
+              onCreateJournalFromRecipe={createJournalFromRecipe}
+              onSaveTimeline={saveTimelineToArchive}
+              onUpdateTimeline={updateActiveTimeline}
+              onLoadTimeline={loadTimelineFromArchive}
+              onDuplicateTimeline={duplicateTimelineInArchive}
+              onDeleteTimeline={deleteTimelineFromArchive}
+              onAssociateTimelineToRecipe={associateTimelineToRecipe}
+              onCreateJournalFromTimeline={createJournalFromTimeline}
+              onCreateJournalEntry={createJournalEntry}
+              onUpdateJournalEntry={updateJournalInArchive}
+              onDeleteJournalEntry={deleteJournalFromArchive}
+              onLoadJournalSnapshot={loadJournalSnapshotIntoPlanner}
+              onCreateTrialFromJournal={createNewTrialFromJournal}
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-function Header({ onReset }: { onReset: () => void }) {
+function DiaryPanel({
+  archive,
+  archiveMessage,
+  currentJournalEntryId,
+  timer,
+  onUpdateJournalEntry,
+  onDeleteJournalEntry,
+  onLoadJournalSnapshot,
+  onLoadJournalRecipe,
+  onLoadJournalTimeline,
+  onCreateTrialFromJournal,
+  onResumeSession,
+  onSaveJournalRecipe,
+  onSaveJournalTimeline,
+}: {
+  archive: ArchiveState;
+  archiveMessage: string;
+  currentJournalEntryId?: string;
+  timer: TimerState;
+  onUpdateJournalEntry: Parameters<typeof ArchivePanel>[0]['onUpdateJournalEntry'];
+  onDeleteJournalEntry: (entryId: string) => void;
+  onLoadJournalSnapshot: (entryId: string) => void;
+  onLoadJournalRecipe: (entryId: string) => void;
+  onLoadJournalTimeline: (entryId: string) => void;
+  onCreateTrialFromJournal: (entryId: string) => void;
+  onResumeSession: () => void;
+  onSaveJournalRecipe: (entryId: string) => void;
+  onSaveJournalTimeline: (entryId: string) => void;
+}) {
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [editorValues, setEditorValues] = useState<JournalEditorValues | null>(null);
+  const sortedEntries = useMemo(
+    () => sortJournalEntries(archive.journal, currentJournalEntryId),
+    [archive.journal, currentJournalEntryId],
+  );
+  const selectedEntry = selectedEntryId ? archive.journal.find((entry) => entry.id === selectedEntryId) : undefined;
+
+  useEffect(() => {
+    if (selectedEntryId && !selectedEntry) {
+      setSelectedEntryId(null);
+      setEditorValues(null);
+    }
+  }, [selectedEntry, selectedEntryId]);
+
+  const openEntry = (entry: JournalEntry) => {
+    setSelectedEntryId(entry.id);
+    setEditorValues({
+      title: entry.title,
+      date: entry.date,
+      status: entry.sessionData.status,
+      resultLabel: entry.sessionData.resultLabel,
+      initialNotes: entry.sessionData.initialNotes,
+      finalNotes: entry.sessionData.finalNotes,
+      nextAdjustment: entry.sessionData.nextAdjustment,
+    });
+  };
+
+  const saveEntry = () => {
+    if (!selectedEntry || !editorValues) {
+      return;
+    }
+
+    onUpdateJournalEntry(selectedEntry.id, {
+      ...editorValues,
+      sourceRecipeId: selectedEntry.sourceRecipeId ?? '',
+      sourceTimelineId: selectedEntry.sourceTimelineId ?? '',
+    });
+  };
+
+  if (selectedEntry && editorValues) {
+    return (
+      <DiaryEntryEditor
+        entry={selectedEntry}
+        values={editorValues}
+        timer={selectedEntry.id === currentJournalEntryId ? timer : selectedEntry.timerState}
+        onChange={setEditorValues}
+        onBack={() => {
+          setSelectedEntryId(null);
+          setEditorValues(null);
+        }}
+        onSave={saveEntry}
+        onResumeSession={onResumeSession}
+        onLoadJournalRecipe={() => onLoadJournalRecipe(selectedEntry.id)}
+        onLoadJournalTimeline={() => onLoadJournalTimeline(selectedEntry.id)}
+        onSaveJournalRecipe={() => onSaveJournalRecipe(selectedEntry.id)}
+        onSaveJournalTimeline={() => onSaveJournalTimeline(selectedEntry.id)}
+      />
+    );
+  }
+
   return (
-    <header className="border-b border-stone-200 bg-white/88 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
-        <div className="flex items-center gap-4">
-          <div className="grid h-11 w-14 place-items-center rounded-full border-2 border-amber-600/80 bg-amber-50 text-amber-700">
-            <BreadIcon size={32} strokeWidth={1.8} aria-hidden="true" />
+    <section className="grid gap-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="font-display text-[30px] font-semibold tracking-normal text-ink">Diario</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#6f6257]">
+            Bozze, sessioni attive e prove completate vivono nello stesso elenco.
+          </p>
+        </div>
+        {archiveMessage && (
+          <p className="rounded-full border border-sage/25 bg-sage/12 px-3 py-2 text-sm font-semibold text-ink">
+            {archiveMessage}
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-3">
+        {sortedEntries.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[#322e2b24] bg-cream/35 p-5 text-sm leading-6 text-[#6f6257]">
+            Nessuna prova nel Diario. Parti dal Planner e usa Vai ai Tempi per creare la prossima bozza.
           </div>
-          <h1 className="text-[28px] font-semibold tracking-normal text-ink sm:text-[30px]">
-            Bread Planner
-          </h1>
+        ) : sortedEntries.map((entry) => (
+          <DiaryEntryCard
+            key={entry.id}
+            entry={entry}
+            isCurrent={entry.id === currentJournalEntryId}
+            onOpen={() => openEntry(entry)}
+            onResume={entry.sessionData.status === 'active' ? onResumeSession : undefined}
+            onLoadJournalSnapshot={() => onLoadJournalSnapshot(entry.id)}
+            onCreateTrialFromJournal={() => onCreateTrialFromJournal(entry.id)}
+            onDelete={() => onDeleteJournalEntry(entry.id)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type JournalEditorValues = {
+  title: string;
+  date: string;
+  status: JournalStatus;
+  resultLabel: string;
+  initialNotes: string;
+  finalNotes: string;
+  nextAdjustment: string;
+};
+
+function DiaryEntryCard({
+  entry,
+  isCurrent,
+  onOpen,
+  onResume,
+  onLoadJournalSnapshot,
+  onCreateTrialFromJournal,
+  onDelete,
+}: {
+  entry: JournalEntry;
+  isCurrent: boolean;
+  onOpen: () => void;
+  onResume?: () => void;
+  onLoadJournalSnapshot: () => void;
+  onCreateTrialFromJournal: () => void;
+  onDelete: () => void;
+}) {
+  const visual = journalStatusVisuals[entry.sessionData.status];
+
+  return (
+    <article className={`rounded-[18px] border border-l-[6px] p-4 text-sm leading-5 text-[#6f6257] shadow-inner-soft ring-1 transition ${visual.card} ${
+      isCurrent ? 'border-crust/35 ring-2 ring-crust/25' : 'border-[#322e2b14]'
+    }`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-semibold text-ink">{entry.title}</h3>
+            <StatusBadge status={entry.sessionData.status} />
+          </div>
+          <p className="mt-1 text-[#8d8176]">{formatDiaryDate(entry.date)}</p>
+          {entry.sessionData.resultLabel && (
+            <p className="mt-2 font-medium text-ink">Risultato: {entry.sessionData.resultLabel}</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <SummaryPill>
+              Ingredienti: {formatGram(entry.recipeSnapshot.inputs.flourTotal)} farina · {Math.round(entry.recipeSnapshot.inputs.hydration)}% idratazione · {getRecipeProfileLabel(entry.recipeSnapshot)}
+            </SummaryPill>
+            <SummaryPill>
+              Tempi: {entry.timelineSnapshot?.name || 'piano da completare'} · temperatura {getAmbientTemperatureOption(entry.sessionData.ambientTemperature).label.toLowerCase()}
+            </SummaryPill>
+          </div>
+          {entry.sessionData.finalNotes && (
+            <p className="mt-3 line-clamp-2">{entry.sessionData.finalNotes}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+          <DiaryActionButton onClick={onOpen}>Apri</DiaryActionButton>
+          {onResume && <DiaryActionButton onClick={onResume}>Riprendi</DiaryActionButton>}
+          <DiaryActionButton onClick={onLoadJournalSnapshot}>Usa come base</DiaryActionButton>
+          <DiaryActionButton onClick={onCreateTrialFromJournal}>Nuova prova</DiaryActionButton>
+          <DiaryActionButton onClick={onDelete} tone="danger" icon={Trash2}>Elimina</DiaryActionButton>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function DiaryEntryEditor({
+  entry,
+  values,
+  timer,
+  onChange,
+  onBack,
+  onSave,
+  onResumeSession,
+  onLoadJournalRecipe,
+  onLoadJournalTimeline,
+  onSaveJournalRecipe,
+  onSaveJournalTimeline,
+}: {
+  entry: JournalEntry;
+  values: JournalEditorValues;
+  timer?: TimerState;
+  onChange: (values: JournalEditorValues) => void;
+  onBack: () => void;
+  onSave: () => void;
+  onResumeSession: () => void;
+  onLoadJournalRecipe: () => void;
+  onLoadJournalTimeline: () => void;
+  onSaveJournalRecipe: () => void;
+  onSaveJournalTimeline: () => void;
+}) {
+  return (
+    <section className="grid gap-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="bp-focus inline-flex min-h-9 items-center justify-center rounded-full border border-[#322e2b24] bg-white px-3 text-sm font-semibold text-[#6f6257] transition hover:border-crust/35 hover:bg-cream/45 hover:text-ink"
+          >
+            Torna al Diario
+          </button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-[30px] font-semibold tracking-normal text-ink">{entry.title}</h2>
+            <StatusBadge status={entry.sessionData.status} />
+          </div>
+          <p className="mt-1 text-sm leading-6 text-[#6f6257]">
+            Snapshot ricetta e piano restano legati a questa prova.
+          </p>
+        </div>
+        {entry.sessionData.status === 'active' && (
+          <button
+            type="button"
+            onClick={onResumeSession}
+            className="bp-focus inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-crust bg-crust px-4 text-sm font-semibold text-white transition hover:border-[#925028] hover:bg-[#925028]"
+          >
+            <Play size={16} aria-hidden="true" />
+            Riprendi
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
+        <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <JournalTextInput
+              label="Titolo prova"
+              value={values.title}
+              onChange={(title) => onChange({ ...values, title })}
+            />
+            <JournalTextInput
+              label="Data"
+              type="date"
+              value={values.date}
+              onChange={(date) => onChange({ ...values, date })}
+            />
+            <JournalSelect
+              label="Stato"
+              value={values.status}
+              onChange={(status) => onChange({ ...values, status: status as JournalStatus })}
+              options={[
+                { value: 'draft', label: 'Bozza' },
+                { value: 'active', label: 'Attiva' },
+                { value: 'scheduled', label: 'Programmata' },
+                { value: 'completed', label: 'Completata' },
+              ]}
+            />
+            <JournalTextInput
+              label="Risultato"
+              value={values.resultLabel}
+              onChange={(resultLabel) => onChange({ ...values, resultLabel })}
+              placeholder="Buona, da migliorare..."
+            />
+          </div>
+          <div className="mt-3 grid gap-3">
+            <JournalTextArea
+              label="Note iniziali"
+              value={values.initialNotes}
+              onChange={(initialNotes) => onChange({ ...values, initialNotes })}
+            />
+            <JournalTextArea
+              label="Note"
+              value={values.finalNotes}
+              onChange={(finalNotes) => onChange({ ...values, finalNotes })}
+            />
+            <JournalTextArea
+              label="Cosa cambiare la prossima volta"
+              value={values.nextAdjustment}
+              onChange={(nextAdjustment) => onChange({ ...values, nextAdjustment })}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <DiaryActionButton onClick={onSave} tone="primary" icon={Save}>Salva modifiche</DiaryActionButton>
+          </div>
         </div>
 
-        <nav className="flex flex-wrap items-center gap-4 text-sm font-medium text-stone-700 sm:gap-7">
-          <HeaderAction icon={<RotateCcw size={20} />} label="Ripristina" onClick={onReset} />
+        <aside className="grid gap-4 xl:sticky xl:top-6 xl:self-start">
+          <DiaryIngredientsSnapshotCard
+            entry={entry}
+            onLoadJournalRecipe={onLoadJournalRecipe}
+            onSaveJournalRecipe={onSaveJournalRecipe}
+          />
+
+          <DiaryTimelineSnapshotCard
+            entry={entry}
+            onLoadJournalTimeline={onLoadJournalTimeline}
+            onSaveJournalTimeline={onSaveJournalTimeline}
+            onResumeSession={onResumeSession}
+          />
+
+          {entry.sessionData.status === 'active' && (
+            <DiaryTimerSummary entry={entry} timer={timer} />
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function DiaryIngredientsSnapshotCard({
+  entry,
+  onLoadJournalRecipe,
+  onSaveJournalRecipe,
+}: {
+  entry: JournalEntry;
+  onLoadJournalRecipe: () => void;
+  onSaveJournalRecipe: () => void;
+}) {
+  const recipe = entry.recipeSnapshot;
+  const ingredients = recipe.calculatedIngredients;
+  const flourRows = calculateFlourBreakdown(recipe.inputs.flourTotal, recipe.flourMix);
+  const visibleFlourRows = flourRows.filter((row) => row.percentage > 0);
+
+  return (
+    <section className="rounded-[18px] border border-[#322e2b14] bg-cream/35 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-ink">Ingredienti</h3>
+          <p className="mt-1 text-sm font-semibold text-crust">{recipe.name || entry.title}</p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#6f6257] ring-1 ring-[#322e2b14]">
+          {getRecipeProfileLabel(recipe)}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2 text-sm text-[#6f6257]">
+        <SessionMetric label="Farina" value={formatGram(recipe.inputs.flourTotal)} />
+        <SessionMetric label="Idratazione" value={`${Math.round(recipe.inputs.hydration)}%`} />
+        <SessionMetric label="Acqua" value={formatGram(ingredients.waterTotal)} />
+        <SessionMetric label="Starter" value={formatGram(ingredients.starter)} />
+        <SessionMetric label="Idratazione starter" value={`${Math.round(recipe.inputs.starterHydration)}%`} />
+        <SessionMetric label="Sale" value={formatGram(ingredients.salt)} />
+        <SessionMetric label="Olio" value={formatGram(ingredients.oil)} />
+        <SessionMetric label="Peso impasto stimato" value={formatGram(recipe.estimatedDoughWeight)} />
+      </div>
+
+      {visibleFlourRows.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-[#322e2b14] bg-white/74 p-3">
+          <h4 className="text-sm font-semibold text-ink">Mix farine</h4>
+          <div className="mt-2 grid gap-2">
+            {visibleFlourRows.map((row) => (
+              <div key={row.id} className="flex items-baseline justify-between gap-3 text-sm text-[#6f6257]">
+                <span>{row.label}</span>
+                <span className="text-right font-semibold text-ink">
+                  {Math.round(row.percentage)}% · {formatGram(row.grams)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <DiaryActionButton onClick={onLoadJournalRecipe} icon={FolderOpen}>Carica nel planner</DiaryActionButton>
+        <DiaryActionButton onClick={onSaveJournalRecipe} icon={FilePlus2}>Salva ricetta</DiaryActionButton>
+      </div>
+    </section>
+  );
+}
+
+function DiaryTimelineSnapshotCard({
+  entry,
+  onLoadJournalTimeline,
+  onSaveJournalTimeline,
+  onResumeSession,
+}: {
+  entry: JournalEntry;
+  onLoadJournalTimeline: () => void;
+  onSaveJournalTimeline: () => void;
+  onResumeSession: () => void;
+}) {
+  const timeline = entry.timelineSnapshot;
+  const temperature = getAmbientTemperatureOption(entry.sessionData.ambientTemperature);
+
+  return (
+    <section className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-ink">Tempi</h3>
+          <p className="mt-1 text-sm font-semibold text-crust">{timeline?.name || 'Piano non ancora completato'}</p>
+        </div>
+        <span className="rounded-full bg-wheat/30 px-3 py-1 text-xs font-semibold text-ink ring-1 ring-wheat/30">
+          {temperature.label}
+        </span>
+      </div>
+
+      {!timeline ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-[#322e2b24] bg-cream/45 p-3 text-sm leading-6 text-[#6f6257]">
+          Piano non ancora completato. Aggiungi una timeline dalla tab Tempi quando sei pronto.
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-2 text-sm text-[#6f6257]">
+            <SessionMetric label="Temperatura" value={`${temperature.label} · ${temperature.rangeLabel}`} />
+            <SessionMetric label="Durata totale" value={formatDurationMinutes(timeline.totalDurationMinutes)} />
+            <SessionMetric label="Step" value={`${timeline.steps.length}`} />
+            {entry.planning?.mode === 'backward' && (
+              <SessionMetric label="Programmata per" value={`${entry.planning.targetEndDate} ${entry.planning.targetEndTime}`} />
+            )}
+          </div>
+
+          <ol className="mt-4 grid gap-2">
+            {timeline.steps.map((step, index) => (
+              <li key={step.id} className="rounded-2xl border border-[#322e2b14] bg-cream/35 p-3">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="font-semibold text-ink">{index + 1}. {step.label}</span>
+                  <span className="shrink-0 font-semibold text-crust">{formatDurationMinutes(step.durationMinutes)}</span>
+                </div>
+                {(step.description || step.note) && (
+                  <p className="mt-1 text-xs leading-5 text-[#6f6257]">{step.note || step.description}</p>
+                )}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {timeline ? (
+          <>
+            <DiaryActionButton onClick={onLoadJournalTimeline} icon={Clock3}>Carica nei Tempi</DiaryActionButton>
+            <DiaryActionButton onClick={onSaveJournalTimeline} icon={FilePlus2}>Salva il piano</DiaryActionButton>
+          </>
+        ) : (
+          <DiaryActionButton onClick={onResumeSession} icon={Clock3}>Torna ai Tempi</DiaryActionButton>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DiaryTimerSummary({ entry, timer }: { entry: JournalEntry; timer?: TimerState }) {
+  const timelineSteps = entry.timelineSnapshot?.steps ?? [];
+  const elapsedMs = timer ? getElapsedMs(timer) : 0;
+  const totalDurationMs = getTotalDurationMs(timelineSteps);
+  const currentStepInfo = getCurrentStepInfo(timelineSteps, elapsedMs);
+  const nextStep = currentStepInfo ? timelineSteps[currentStepInfo.index + 1] : null;
+  const progressPercentage =
+    totalDurationMs > 0 ? Math.min(100, Math.round((elapsedMs / totalDurationMs) * 100)) : 0;
+
+  return (
+    <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft">
+      <h3 className="text-lg font-semibold text-ink">Timer</h3>
+      {timelineSteps.length === 0 ? (
+        <p className="mt-2 text-sm leading-6 text-[#6f6257]">
+          Aggiungi un piano nella tab Tempi per vedere qui il riepilogo operativo.
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-3 text-sm text-[#6f6257]">
+          <SessionMetric label="Step corrente" value={currentStepInfo?.step.label ?? 'Pronta per partire'} />
+          <SessionMetric label="Tempo rimanente" value={formatTimerMs(currentStepInfo?.remainingInStepMs ?? 0)} />
+          <SessionMetric label="Prossimo step" value={nextStep?.label ?? 'Nessun prossimo step'} />
+          <SessionMetric label="Avanzamento" value={`${progressPercentage}%`} />
+          <div className="h-3 overflow-hidden rounded-full bg-cream">
+            <div className="h-full rounded-full bg-crust transition-all" style={{ width: `${progressPercentage}%` }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: JournalStatus }) {
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${journalStatusVisuals[status].badge}`}>
+      {statusLabels[status]}
+    </span>
+  );
+}
+
+function SummaryPill({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-full border border-[#322e2b14] bg-cream/42 px-3 py-1 text-xs font-semibold text-[#6f6257]">
+      {children}
+    </span>
+  );
+}
+
+function DiaryActionButton({
+  children,
+  onClick,
+  tone = 'secondary',
+  disabled = false,
+  icon: Icon,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  tone?: 'primary' | 'secondary' | 'danger';
+  disabled?: boolean;
+  icon?: IconComponent;
+}) {
+  const className = tone === 'primary'
+    ? 'border-crust bg-crust text-white hover:border-[#925028] hover:bg-[#925028]'
+    : tone === 'danger'
+      ? 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-red-200 hover:bg-red-50 hover:text-red-600'
+      : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/45 hover:text-ink';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`bp-focus inline-flex min-h-9 items-center justify-center gap-2 rounded-full border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+    >
+      {Icon && <Icon size={15} aria-hidden="true" />}
+      {children}
+    </button>
+  );
+}
+
+function JournalTextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-[#6f6257]">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={placeholder}
+        className="min-h-11 rounded-2xl border border-[#322e2b24] bg-white px-3 text-base font-medium text-ink outline-none transition focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
+      />
+    </label>
+  );
+}
+
+function JournalTextArea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-[#6f6257]">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        rows={3}
+        className="rounded-2xl border border-[#322e2b24] bg-white px-3 py-2 text-base font-medium text-ink outline-none transition focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
+      />
+    </label>
+  );
+}
+
+function JournalSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-[#6f6257]">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        className="min-h-11 rounded-2xl border border-[#322e2b24] bg-white px-3 text-base font-medium text-ink outline-none transition focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SessionMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-[#322e2b14] pb-2 last:border-b-0 last:pb-0">
+      <span>{label}</span>
+      <span className="text-right font-semibold text-ink">{value}</span>
+    </div>
+  );
+}
+
+function formatTimerMs(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+function formatDurationMinutes(minutes: number) {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const restMinutes = safeMinutes % 60;
+  if (hours > 0 && restMinutes > 0) {
+    return `${hours}h ${restMinutes} min`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  return `${restMinutes} min`;
+}
+
+function getRecipeProfileLabel(recipe: RecipeSnapshot) {
+  if (recipe.activeProfileId === 'custom') {
+    return recipe.customProfileName.trim() || 'Custom';
+  }
+  return doughProfiles.find((profile) => profile.id === recipe.activeProfileId)?.label ?? recipe.customProfileName ?? 'Impasto';
+}
+
+function Header({
+  activeView,
+  recipesCount,
+  timelinesCount,
+  newRecipeBadge,
+  newTimelineBadge,
+  onOpenPlanner,
+  onOpenRecipes,
+  onOpenTimelines,
+  onReset,
+}: {
+  activeView: AppView;
+  recipesCount: number;
+  timelinesCount: number;
+  newRecipeBadge: boolean;
+  newTimelineBadge: boolean;
+  onOpenPlanner: () => void;
+  onOpenRecipes: () => void;
+  onOpenTimelines: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <header className="border-b border-[#322e2b14] bg-[#fffdf8]/88 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+        <button
+          type="button"
+          onClick={onOpenPlanner}
+          className="bp-focus flex items-center gap-3 rounded-2xl text-left"
+          aria-label="Apri il planner"
+        >
+          <div className="grid h-12 w-14 place-items-center rounded-[18px] border border-[#322e2b18] bg-cream text-ink shadow-inner-soft">
+            <BreadIcon size={44} strokeWidth={1.8} aria-hidden="true" />
+          </div>
+          <h1 className="font-display text-[27px] font-semibold tracking-normal text-ink sm:text-[30px]">
+            Bread Planner
+          </h1>
+        </button>
+
+        <nav className="flex flex-wrap items-center gap-2 text-sm font-medium text-[#6f6257] sm:gap-3">
+          <HeaderAction
+            icon={<BookOpen size={18} />}
+            label="Ricette"
+            isActive={activeView === 'recipes'}
+            hasContent={recipesCount > 0}
+            hasNewBadge={newRecipeBadge}
+            onClick={onOpenRecipes}
+          />
+          <HeaderAction
+            icon={<CalendarDays size={18} />}
+            label="Timeline"
+            isActive={activeView === 'timelines'}
+            hasContent={timelinesCount > 0}
+            hasNewBadge={newTimelineBadge}
+            onClick={onOpenTimelines}
+          />
           <HeaderAction icon={<CircleHelp size={20} />} label="Guida" disabled />
+          <HeaderAction icon={<RotateCcw size={20} />} label="Ripristina" onClick={onReset} />
         </nav>
       </div>
     </header>
@@ -931,23 +2074,95 @@ function HeaderAction({
   label,
   onClick,
   disabled = false,
+  isActive = false,
+  hasContent = false,
+  hasNewBadge = false,
 }: {
   icon: ReactNode;
   label: string;
   onClick?: () => void;
   disabled?: boolean;
+  isActive?: boolean;
+  hasContent?: boolean;
+  hasNewBadge?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={disabled ? 'Disponibile in una prossima release' : undefined}
-      className="inline-flex min-h-9 items-center gap-2 rounded-md px-1 text-stone-700 transition hover:text-ink focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:text-stone-400"
+      title={disabled ? 'Disponibile in una prossima release' : hasNewBadge ? `${label}: nuovo contenuto salvato` : undefined}
+      className={`bp-focus relative inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-[#6f6257] transition hover:text-ink disabled:cursor-not-allowed disabled:text-[#9b9188] disabled:hover:text-[#9b9188] ${
+        isActive
+          ? 'border-crust/35 bg-cream text-ink shadow-inner-soft'
+          : hasContent
+            ? 'border-[#322e2b18] bg-white/80 text-ink'
+            : 'border-transparent bg-transparent'
+      }`}
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={hasNewBadge ? `${label}, nuovo contenuto salvato` : label}
     >
       {icon}
       <span>{label}</span>
+      {hasNewBadge && (
+        <span className="absolute -right-1 -top-1 grid h-3 w-3 place-items-center rounded-full bg-crust ring-2 ring-white">
+          <span className="sr-only">Nuovo contenuto salvato</span>
+        </span>
+      )}
     </button>
+  );
+}
+
+function MainFlowTabs({
+  activeSection,
+  onChange,
+}: {
+  activeSection: PlannerSection;
+  onChange: (section: PlannerSection) => void;
+}) {
+  const tabs: Array<{ id: PlannerSection; label: string; copy: string }> = [
+    {
+      id: 'planner',
+      label: 'Planner',
+      copy: 'Costruisci la ricetta e prepara gli ingredienti.',
+    },
+    {
+      id: 'times',
+      label: 'Tempi',
+      copy: 'Organizza tempi, temperatura e timer.',
+    },
+    {
+      id: 'diary',
+      label: 'Diario',
+      copy: 'Bozza, sessione attiva e storico prove.',
+    },
+  ];
+
+  return (
+    <nav
+      className="grid gap-0 bg-cream/45 px-2 pt-2 md:grid-cols-3 md:px-3"
+      aria-label="Fasi del planner"
+    >
+      {tabs.map((tab) => {
+        const isActive = activeSection === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`bp-focus min-h-16 rounded-t-[18px] border px-4 py-3 text-left transition ${
+              isActive
+                ? 'relative -mb-px border-[#322e2b18] border-b-[#fffdf8] bg-[#fffdf8] text-ink shadow-inner-soft'
+                : 'border-transparent bg-transparent text-[#6f6257] hover:border-[#322e2b18] hover:bg-white/70'
+            }`}
+            aria-current={isActive ? 'page' : undefined}
+          >
+            <span className="block text-base font-semibold">{tab.label}</span>
+            <span className="mt-1 block text-sm leading-5 text-[#6f6257]">{tab.copy}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -960,6 +2175,7 @@ function DoughProfileSelector({
   onSelectProfile,
   onSelectCustom,
   onCustomProfileNameChange,
+  onLoadRecipe,
 }: {
   activeProfileId: ActiveProfileId;
   customDisplayName: string;
@@ -969,23 +2185,23 @@ function DoughProfileSelector({
   onSelectProfile: (profile: DoughProfile) => void;
   onSelectCustom: () => void;
   onCustomProfileNameChange: (value: string) => void;
+  onLoadRecipe: () => void;
 }) {
   const profileCopy: Record<string, string> = {
     base: 'Equilibrato, semplice da gestire.',
     high: 'Più acqua, impasto più elastico.',
     focaccia: 'Impasto morbido, olio incluso.',
   };
-
   return (
-    <section className="rounded-[12px] border border-stone-200 bg-white p-4 sm:p-5">
+    <section className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft sm:p-5">
       <div className="mb-3">
-        <h2 className="text-xl font-semibold text-ink">Scegli il tuo impasto</h2>
-        <p className="mt-1 text-sm leading-5 text-stone-600">
+        <h2 className="text-xl font-semibold text-ink">Profilo impasto</h2>
+        <p className="mt-1 text-sm leading-5 text-[#6f6257]">
           Parti da un profilo e personalizza la ricetta.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {profiles.map((profile) => {
           const Icon = getProfileIcon(profile.id);
           const isSelected = activeProfileId === profile.id;
@@ -994,20 +2210,20 @@ function DoughProfileSelector({
               key={profile.id}
               type="button"
               onClick={() => onSelectProfile(profile)}
-              className={`flex min-h-[116px] flex-col items-start rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
+              className={`bp-focus flex min-h-[124px] flex-col items-start rounded-[18px] border p-3 text-left transition ${
                 isSelected
-                  ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-200'
-                  : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/35'
+                  ? 'border-crust/65 bg-cream text-ink ring-2 ring-crust/15'
+                  : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/35'
               }`}
               aria-pressed={isSelected}
             >
-              <span className={`grid h-9 w-9 place-items-center rounded-full ${
-                isSelected ? 'bg-white text-amber-700 ring-1 ring-amber-200' : 'bg-stone-50 text-stone-700 ring-1 ring-stone-200'
+              <span className={`grid h-10 w-10 place-items-center rounded-full ${
+                isSelected ? 'bg-white text-crust ring-1 ring-crust/25' : 'bg-cream/55 text-ink ring-1 ring-[#322e2b18]'
               }`}>
                 <Icon size={21} strokeWidth={1.8} aria-hidden="true" />
               </span>
               <span className="mt-3 block text-base font-semibold text-ink">{profile.label}</span>
-              <span className="mt-1 block text-sm leading-5 text-stone-500">
+              <span className="mt-1 block text-sm leading-5 text-[#6f6257]">
                 {profileCopy[profile.id] ?? profile.description}
               </span>
             </button>
@@ -1026,15 +2242,15 @@ function DoughProfileSelector({
               onSelectCustom();
             }
           }}
-          className={`flex min-h-[116px] cursor-pointer flex-col items-start rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100 ${
+          className={`bp-focus flex min-h-[124px] cursor-pointer flex-col items-start rounded-[18px] border p-3 text-left transition ${
             isSelected
-              ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-200'
-              : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/35'
+              ? 'border-crust/65 bg-cream text-ink ring-2 ring-crust/15'
+              : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/35'
           }`}
           aria-pressed={isSelected}
         >
           <span className={`grid h-9 w-9 place-items-center rounded-full ${
-            isSelected ? 'bg-white text-amber-700 ring-1 ring-amber-200' : 'bg-stone-50 text-stone-700 ring-1 ring-stone-200'
+            isSelected ? 'bg-white text-crust ring-1 ring-crust/25' : 'bg-cream/55 text-ink ring-1 ring-[#322e2b18]'
           }`}>
             <CirclePlus size={21} strokeWidth={1.8} aria-hidden="true" />
           </span>
@@ -1049,16 +2265,32 @@ function DoughProfileSelector({
                 onFocus={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
                 onChange={(event) => onCustomProfileNameChange(event.currentTarget.value)}
-                className="min-h-10 w-full min-w-0 rounded-lg border border-amber-200 bg-white px-3 text-base font-semibold text-ink outline-none transition placeholder:text-stone-400 focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                className="min-h-10 w-full min-w-0 rounded-xl border border-crust/25 bg-white px-3 text-base font-semibold text-ink outline-none transition placeholder:text-[#9b9188] focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
               />
             ) : (
               <span className="block text-base font-semibold">{customDisplayName}</span>
             )}
-            <span className="mt-1 block text-sm leading-5 text-stone-500">Crea il tuo profilo.</span>
+            <span className="mt-1 block text-sm leading-5 text-[#6f6257]">Crea il tuo profilo.</span>
           </span>
         </div>
           );
         })()}
+        <button
+          type="button"
+          onClick={onLoadRecipe}
+          className="bp-focus flex min-h-[124px] flex-col items-start rounded-[18px] border border-dashed border-[#322e2b2e] bg-cream/30 p-3 text-left text-[#6f6257] transition hover:border-crust/40 hover:bg-cream/55"
+        >
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-ink ring-1 ring-[#322e2b18]">
+            <BookOpen size={21} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <span className="mt-3 block text-base font-semibold text-ink">Carica ricetta</span>
+          <span className="mt-1 block text-sm leading-5 text-[#6f6257]">
+            Usa una ricetta salvata e adattala alle tue esigenze.
+          </span>
+          <span className="mt-3 inline-flex min-h-8 items-center rounded-full border border-crust/25 bg-white px-3 text-xs font-semibold text-crust">
+            Carica
+          </span>
+        </button>
       </div>
     </section>
   );
@@ -1083,7 +2315,7 @@ function CalculatorForm({
       label: 'Idratazione',
       unit: '%',
       value: inputs.hydration,
-      step: 0.1,
+      step: 1,
       icon: Droplets,
     },
     {
@@ -1091,7 +2323,7 @@ function CalculatorForm({
       label: 'Sale',
       unit: unitModes.saltPercentage,
       value: unitModes.saltPercentage === 'g' ? gramValues.saltPercentage : inputs.saltPercentage,
-      step: unitModes.saltPercentage === 'g' ? 1 : 0.1,
+      step: 1,
       icon: SaltIcon,
       convertibleField: 'saltPercentage',
     },
@@ -1100,7 +2332,7 @@ function CalculatorForm({
       label: 'Starter',
       unit: unitModes.starterPercentage,
       value: unitModes.starterPercentage === 'g' ? gramValues.starterPercentage : inputs.starterPercentage,
-      step: unitModes.starterPercentage === 'g' ? 1 : 0.1,
+      step: 1,
       icon: JarIcon,
       convertibleField: 'starterPercentage',
     },
@@ -1109,7 +2341,7 @@ function CalculatorForm({
       label: 'Idratazione starter',
       unit: '%',
       value: inputs.starterHydration,
-      step: 0.1,
+      step: 1,
       icon: Droplets,
     },
     {
@@ -1117,14 +2349,14 @@ function CalculatorForm({
       label: 'Olio',
       unit: unitModes.oilPercentage,
       value: unitModes.oilPercentage === 'g' ? gramValues.oilPercentage : inputs.oilPercentage,
-      step: unitModes.oilPercentage === 'g' ? 1 : 0.1,
+      step: 1,
       icon: OilIcon,
       convertibleField: 'oilPercentage',
     },
   ];
 
   return (
-    <form className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+    <form className="mt-4 overflow-hidden rounded-[18px] border border-[#322e2b14] bg-white" onSubmit={(event) => event.preventDefault()}>
       {fields.map((field) => (
         <NumberField
           key={field.field}
@@ -1165,7 +2397,7 @@ function FlourTotalForm({
     : `Il mix deve arrivare al 100%. Ora sei a ${formatPercent(totalPercentage)}%.`;
 
   return (
-    <form className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+    <form className="mt-4 overflow-hidden rounded-[18px] border border-[#322e2b14] bg-white" onSubmit={(event) => event.preventDefault()}>
       <NumberField
         label="Farina"
         unit="g"
@@ -1184,11 +2416,11 @@ function FlourTotalForm({
           onClose={() => setIsFlourPanelOpen(false)}
         />
       ) : (
-        <div className="border-t border-stone-200 px-4 py-4">
+        <div className="border-t border-[#322e2b14] px-4 py-4">
           <button
             type="button"
             onClick={() => setIsFlourPanelOpen(true)}
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+            className="bp-focus inline-flex min-h-10 items-center justify-center rounded-full border border-crust/25 bg-cream px-4 text-sm font-semibold text-crust transition hover:border-crust/45 hover:bg-wheat-50"
           >
             Modifica o crea mix
           </button>
@@ -1218,34 +2450,37 @@ function NumberField({
   onUnitChange?: (unit: InputUnit) => void;
 }) {
   const inputId = `field-${convertibleField ?? label.toLowerCase().replace(/\s+/g, '-')}`;
+  const displayValue = Math.round(value);
 
   return (
-    <div className="grid gap-3 border-b border-stone-200 px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center">
+    <div className="grid gap-3 border-b border-[#322e2b14] px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center">
       <label htmlFor={inputId} className="flex min-w-0 items-center gap-4 text-base font-semibold text-ink">
-        <Icon size={25} strokeWidth={1.85} className="shrink-0 text-stone-900" aria-hidden="true" />
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-cream/65 text-ink ring-1 ring-[#322e2b12]">
+          <Icon size={24} strokeWidth={1.85} aria-hidden="true" />
+        </span>
         <span className="min-w-0">{label}</span>
       </label>
-      <span className="flex min-h-12 overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:border-amber-500 focus-within:ring-4 focus-within:ring-amber-100">
+      <span className="flex min-h-12 overflow-hidden rounded-2xl border border-[#322e2b24] bg-white focus-within:border-crust focus-within:ring-4 focus-within:ring-[rgba(178,104,55,0.18)]">
         <input
           id={inputId}
           type="number"
           min="0"
           step={step}
-          value={value}
+          value={displayValue}
           onChange={(event) => onChange(event.currentTarget.valueAsNumber || 0)}
           className="w-full min-w-0 bg-transparent px-3 text-[22px] font-medium text-ink outline-none"
         />
         {onUnitChange ? (
-          <span className="flex items-center gap-1 border-l border-stone-200 bg-stone-50 p-1">
+          <span className="flex items-center gap-1 border-l border-[#322e2b14] bg-cream/35 p-1">
             {(['%', 'g'] as InputUnit[]).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => onUnitChange(option)}
-                className={`grid h-9 min-w-9 place-items-center rounded-md px-2 text-sm font-semibold transition ${
+                className={`grid h-9 min-w-9 place-items-center rounded-full px-2 text-sm font-semibold transition ${
                   unit === option
-                    ? 'bg-white text-amber-700 shadow-sm ring-1 ring-stone-200'
-                    : 'text-stone-500 hover:text-ink'
+                    ? 'bg-white text-crust shadow-sm ring-1 ring-crust/20'
+                    : 'text-[#6f6257] hover:text-ink'
                 }`}
                 aria-pressed={unit === option}
               >
@@ -1254,7 +2489,7 @@ function NumberField({
             ))}
           </span>
         ) : (
-          <span className="grid w-12 place-items-center border-l border-stone-200 bg-stone-50 text-base font-medium text-stone-700">
+          <span className="grid w-12 place-items-center border-l border-[#322e2b14] bg-cream/35 text-base font-medium text-[#6f6257]">
             {unit}
           </span>
         )}
@@ -1267,30 +2502,32 @@ function IngredientsToWeighCard({
   results,
   flourBreakdown,
   onSaveRecipe,
+  onContinueToTimes,
 }: {
   results: ReturnType<typeof calculateBread>;
   flourBreakdown: FlourBreakdownRow[];
   onSaveRecipe: () => void;
+  onContinueToTimes: () => void;
 }) {
   const hasFlourMix = flourBreakdown.length > 1;
   const hasOil = results.oil !== 0;
 
   return (
-    <aside className="rounded-[12px] border border-stone-200 border-l-[5px] border-l-proof-600 bg-white p-4 shadow-air sm:p-5">
+    <aside className="rounded-[20px] border border-[#322e2b14] border-l-[6px] border-l-sage bg-[#fffdf8] p-4 shadow-air sm:p-5">
       <div className="mb-4">
         <h2 className="text-[22px] font-semibold text-ink">Ingredienti da pesare</h2>
-        <p className="mt-1 text-sm leading-5 text-stone-600">Usa questi valori durante la preparazione.</p>
+        <p className="mt-1 text-sm leading-5 text-[#6f6257]">Usa questi valori durante la preparazione.</p>
       </div>
 
-      <div className="grid gap-3 border-t border-stone-200 pt-4">
+      <div className="grid gap-3 border-t border-[#322e2b14] pt-4">
         <div className="grid gap-2">
           <WeighRow label="Farina" value={results.flourTotal} />
           {hasFlourMix && (
-            <div className="grid gap-1 rounded-lg bg-stone-50 px-3 py-2">
+            <div className="grid gap-1 rounded-2xl bg-cream/40 px-3 py-2">
               {flourBreakdown.map((row) => (
                 <div key={row.id} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate text-stone-600">{row.label}</span>
-                  <span className="whitespace-nowrap font-semibold text-stone-800">{formatGram(row.grams)}</span>
+                  <span className="min-w-0 truncate text-[#6f6257]">{row.label}</span>
+                  <span className="whitespace-nowrap font-semibold text-ink">{formatGram(row.grams)}</span>
                 </div>
               ))}
             </div>
@@ -1302,20 +2539,29 @@ function IngredientsToWeighCard({
         {hasOil && <WeighRow label="Olio" value={results.oil} />}
       </div>
 
-      <div className="my-3 flex items-baseline justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-        <div className="text-sm font-semibold text-stone-600">Peso impasto stimato</div>
+      <div className="my-3 flex items-baseline justify-between gap-3 rounded-2xl border border-[#322e2b14] bg-cream/42 px-3 py-3">
+        <div className="text-sm font-semibold text-[#6f6257]">Peso impasto stimato</div>
         <div className="text-xl font-semibold leading-none text-ink">
           {formatGram(results.estimatedDoughWeight)}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onSaveRecipe}
-        className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
-      >
-        Salva ricetta
-      </button>
+      <div className="mt-5 grid gap-2">
+        <button
+          type="button"
+          onClick={onContinueToTimes}
+          className="bp-focus inline-flex min-h-11 w-full items-center justify-center rounded-full border border-crust bg-crust px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(178,104,55,0.22)] transition hover:border-[#925028] hover:bg-[#925028]"
+        >
+          Vai ai Tempi
+        </button>
+        <button
+          type="button"
+          onClick={onSaveRecipe}
+          className="bp-focus inline-flex min-h-10 w-full items-center justify-center rounded-full border border-crust/25 bg-cream/55 px-4 text-sm font-semibold text-crust transition hover:border-crust/45 hover:bg-wheat-50"
+        >
+          Salva ricetta
+        </button>
+      </div>
     </aside>
   );
 }
@@ -1331,7 +2577,7 @@ function WeighRow({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className={`text-sm leading-5 ${subtle ? 'text-stone-500' : 'text-stone-600'}`}>
+      <span className={`text-sm leading-5 ${subtle ? 'text-[#8d8176]' : 'text-[#6f6257]'}`}>
         {label}
       </span>
       <span className={`whitespace-nowrap text-right font-semibold text-ink ${subtle ? 'text-[19px]' : 'text-[22px]'}`}>
@@ -1360,7 +2606,7 @@ function QuickGuidelines() {
     },
     {
       title: 'Sale',
-      text: 'Non superare 2,2% sulla farina per non rallentare la lievitazione.',
+      text: 'Resta intorno al 2% sulla farina per non rallentare la lievitazione.',
       icon: BowlIcon,
     },
     {
@@ -1371,9 +2617,9 @@ function QuickGuidelines() {
   ];
 
   return (
-    <section className="rounded-[12px] border border-stone-200 bg-white/88 p-5 shadow-air">
-      <div className="mb-5 flex items-center gap-3 text-[22px] font-semibold text-ink">
-        <span className="text-amber-700">
+    <section className="bp-card rounded-[20px] p-5">
+      <div className="bp-doodle-divider mb-5 flex items-center gap-3 text-[22px] font-semibold text-ink">
+        <span className="text-crust">
           <BulbIcon size={28} strokeWidth={1.75} aria-hidden="true" />
         </span>
         Linee guida rapide
@@ -1382,13 +2628,13 @@ function QuickGuidelines() {
         {guidelines.map((guideline) => {
           const Icon = guideline.icon;
           return (
-            <article key={guideline.title} className="flex gap-4 border-stone-200 xl:border-l xl:pl-5 first:border-l-0 first:pl-0">
-              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-100">
+            <article key={guideline.title} className="flex gap-4 border-[#322e2b14] xl:border-l xl:pl-5 first:border-l-0 first:pl-0">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-cream text-crust ring-1 ring-crust/15">
                 <Icon size={28} strokeWidth={1.75} aria-hidden="true" />
               </span>
               <div>
                 <h2 className="text-sm font-semibold text-ink">{guideline.title}</h2>
-                <p className="mt-2 text-sm leading-5 text-stone-600">{guideline.text}</p>
+                <p className="mt-2 text-sm leading-5 text-[#6f6257]">{guideline.text}</p>
               </div>
             </article>
           );
@@ -1403,7 +2649,7 @@ function BreadIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ari
     <svg
       width={size}
       height={size}
-      viewBox="0 0 32 32"
+      viewBox="0 0 128 96"
       fill="none"
       stroke="currentColor"
       strokeWidth={strokeWidth}
@@ -1412,9 +2658,17 @@ function BreadIcon({ size = 24, strokeWidth = 1.8, className, 'aria-hidden': ari
       className={className}
       aria-hidden={ariaHidden}
     >
-      <path d="M5 21.5c0-6.2 4.3-10.7 9.5-10.7 1.7-3.9 7-4.4 9.2-.9 3.2.5 5.3 3.3 5.3 6.7 0 4.2-3.1 7.4-7.5 7.4H8.4C6.5 24 5 22.9 5 21.5Z" />
-      <path d="M14.7 11.1c-.6 1.3-.9 2.7-.7 4.1" />
-      <path d="M21.1 9.4c.6 1.4.7 3 .2 4.5" />
+      <path d="M16.8 64.7c1.4-16.6 12.6-29.4 29.6-34.4 10.8-3.2 22.2-2.4 34.1.9 15.9 4.4 27.2 15.2 29.8 28.8 2.1 11-4.9 19.9-17.5 22.2-18.3 3.4-40.6 2.8-61.7.2-9.5-1.1-15.1-8-14.3-17.7Z" strokeWidth={strokeWidth * 3.2} />
+      <path d="M19.5 66.4c15.2 3.1 39.6 4.8 67.9 1.8 8.5-.9 16.2-2 22.2-3.9" strokeWidth={strokeWidth * 1.45} opacity=".78" />
+      <path d="M25.5 77.8c9.5 1.6 21.2 2.7 34.3 2.7 17.2.1 33.2-1.4 45.2-4" strokeWidth={strokeWidth * 1.55} opacity=".7" />
+      <path d="M36.8 35.2c12.1 3.2 21 11.2 27.4 23.1" strokeWidth={strokeWidth * 2.7} />
+      <path d="M58 27.7c10.5 6.1 17.2 15.3 20.2 27.4" strokeWidth={strokeWidth * 2.7} />
+      <path d="M78.8 31.7c8.7 6.8 13.7 14.7 15.3 23.3" strokeWidth={strokeWidth * 2.45} />
+      <path d="M36.6 55.4c-1.3 1.2-2 2.9-2.2 5.1" strokeWidth={strokeWidth * 1.25} />
+      <path d="M44.3 69.2c2.6.7 5.1 1.1 7.5 1.2" strokeWidth={strokeWidth * 1.2} />
+      <path d="M29.5 64.9c-1.6 2.2-1.7 4.4-.2 6.4" strokeWidth={strokeWidth * 1.1} />
+      <path d="M91.2 66.2c2.1-1.4 3.4-3.2 4-5.3" strokeWidth={strokeWidth * 1.2} />
+      <path d="M72.7 73.1c2.4-.1 4.4-.4 6-.8" strokeWidth={strokeWidth * 1.1} />
     </svg>
   );
 }
@@ -1558,8 +2812,7 @@ function formatGram(value: number) {
 }
 
 function formatPercent(value: number) {
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return String(Math.round(value));
 }
 
 export default App;

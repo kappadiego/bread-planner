@@ -7,6 +7,8 @@ import type {
   SavedTimeline,
   TimelineSnapshot,
 } from './archiveTypes';
+import type { TimelinePlanningState } from './timelinePlanning';
+import type { TimerState } from './timelineUtils';
 
 export const BREAD_PLANNER_ARCHIVE_KEY = 'breadPlanner.archive.v1';
 
@@ -62,6 +64,20 @@ const isTimelineSnapshot = (value: unknown): value is TimelineSnapshot =>
   isNumber(value.totalDurationMinutes) &&
   Array.isArray(value.steps);
 
+const isTimerState = (value: unknown): value is TimerState =>
+  isObject(value) &&
+  (value.status === 'idle' || value.status === 'running' || value.status === 'paused' || value.status === 'finished') &&
+  (value.startedAt === null || isNumber(value.startedAt)) &&
+  (value.pausedAt === null || isNumber(value.pausedAt)) &&
+  isNumber(value.accumulatedPauseMs) &&
+  value.accumulatedPauseMs >= 0;
+
+const isTimelinePlanningState = (value: unknown): value is TimelinePlanningState =>
+  isObject(value) &&
+  (value.mode === 'now' || value.mode === 'backward') &&
+  isString(value.targetEndDate) &&
+  isString(value.targetEndTime);
+
 const isSavedRecipe = (value: unknown): value is SavedRecipe => {
   if (!isObject(value) || !isBaseRecord(value) || !isRecipeSnapshot(value)) {
     return false;
@@ -89,8 +105,15 @@ const isJournalEntry = (value: unknown): value is JournalEntry => {
     (item.sourceRecipeId === undefined || isString(item.sourceRecipeId)) &&
     (item.sourceTimelineId === undefined || isString(item.sourceTimelineId)) &&
     isRecipeSnapshot(item.recipeSnapshot) &&
-    isTimelineSnapshot(item.timelineSnapshot) &&
-    (sessionData.status === 'draft' || sessionData.status === 'completed') &&
+    (item.timelineSnapshot === undefined || isTimelineSnapshot(item.timelineSnapshot)) &&
+    (item.timerState === undefined || isTimerState(item.timerState)) &&
+    (item.planning === undefined || isTimelinePlanningState(item.planning)) &&
+    (
+      sessionData.status === 'draft' ||
+      sessionData.status === 'active' ||
+      sessionData.status === 'scheduled' ||
+      sessionData.status === 'completed'
+    ) &&
     isString(sessionData.initialNotes) &&
     isString(sessionData.finalNotes) &&
     isString(sessionData.resultLabel) &&
@@ -231,8 +254,8 @@ export const deleteJournalEntry = (archive: ArchiveState, entryId: string): Arch
 
 export const createJournalSnapshot = (
   recipeSnapshot: RecipeSnapshot,
-  timelineSnapshot: TimelineSnapshot,
+  timelineSnapshot?: TimelineSnapshot,
 ) => ({
   recipeSnapshot: cloneArchiveValue(recipeSnapshot),
-  timelineSnapshot: cloneArchiveValue(timelineSnapshot),
+  timelineSnapshot: timelineSnapshot ? cloneArchiveValue(timelineSnapshot) : undefined,
 });

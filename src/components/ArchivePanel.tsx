@@ -40,7 +40,6 @@ type ArchivePanelProps = {
   activeTimelineId?: string;
   archiveMessage: string;
   onTabChange: (tab: ArchiveTab) => void;
-  onFocusRecipeSave: () => void;
   onSaveRecipe: (name: string, notes: string, associatedTimelineId?: string) => void;
   onUpdateRecipe: (name: string, notes: string, associatedTimelineId?: string) => void;
   onSaveRecipeWithTimeline: (name: string, notes: string) => void;
@@ -95,7 +94,6 @@ export function ArchivePanel({
   activeTimelineId,
   archiveMessage,
   onTabChange,
-  onFocusRecipeSave,
   onSaveRecipe,
   onUpdateRecipe,
   onSaveRecipeWithTimeline,
@@ -204,52 +202,41 @@ export function ArchivePanel({
     onTabChange('journal');
   };
 
+  const viewCopy = {
+    recipes: {
+      title: 'Ricette',
+      subtitle: 'Le formule che hai salvato per riusarle nel planner.',
+      warning: 'Questi dati sono salvati nel browser. Se cancelli i dati del sito o cambi dispositivo, potresti non ritrovarli.',
+    },
+    timelines: {
+      title: 'Timeline',
+      subtitle: 'I processi di lavorazione che hai salvato per riusarli.',
+      warning: 'Questi processi restano su questo dispositivo. In futuro il login permetterà la sincronizzazione.',
+    },
+    journal: {
+      title: 'Diario',
+      subtitle: 'Le tue prove reali: ricetta, timeline, condizioni, note e risultato.',
+      warning: 'Il Diario salva snapshot delle prove: modificare una ricetta o una timeline dopo una prova non cambia il racconto già registrato.',
+    },
+  }[activeTab];
+
   return (
-    <section id="archive-local" className="rounded-[14px] border border-stone-200 bg-white/88 p-4 shadow-air sm:p-5">
+    <section className="bp-card rounded-[22px] p-4 sm:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-[24px] font-semibold text-ink">Archivio locale</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-stone-600">
-            Questo è il tuo archivio locale: ricette, timeline e prove vengono salvate su questo dispositivo.
+          <h2 className="font-display text-[30px] font-semibold tracking-normal text-ink">{viewCopy.title}</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#6f6257]">
+            {viewCopy.subtitle}
           </p>
-          <p className="mt-2 max-w-3xl rounded-lg bg-amber-50 px-3 py-2 text-sm leading-5 text-amber-900">
-            Questi dati sono salvati nel browser. Se cancelli i dati del sito o cambi dispositivo, potresti non ritrovarli.
-            In futuro il login permetterà la sincronizzazione.
+          <p className="mt-2 max-w-3xl rounded-2xl bg-wheat-50 px-3 py-2 text-sm leading-5 text-ink ring-1 ring-wheat-200">
+            {viewCopy.warning}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onFocusRecipeSave}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
-        >
-          <Save size={18} aria-hidden="true" />
-          Salva ricetta
-        </button>
       </div>
 
       {archiveMessage && (
-        <p className="mt-4 rounded-lg bg-stone-50 px-3 py-2 text-sm font-medium text-stone-700">{archiveMessage}</p>
+        <p className="mt-4 rounded-2xl bg-cream/42 px-3 py-2 text-sm font-medium text-[#6f6257]">{archiveMessage}</p>
       )}
-
-      <div className="mt-5 grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1 sm:grid-cols-3">
-        {([
-          ['recipes', 'Ricette'],
-          ['timelines', 'Timeline'],
-          ['journal', 'Journal'],
-        ] as const).map(([tab, label]) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => onTabChange(tab)}
-            className={`min-h-10 rounded-md px-3 text-sm font-semibold transition ${
-              activeTab === tab ? 'bg-white text-amber-700 shadow-sm ring-1 ring-stone-200' : 'text-stone-600 hover:text-ink'
-            }`}
-            aria-pressed={activeTab === tab}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       {activeTab === 'recipes' && (
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(300px,0.65fr)_minmax(0,1fr)]">
@@ -278,12 +265,12 @@ export function ArchivePanel({
             ) : archive.recipes.map((recipe) => (
               <ArchiveCard key={recipe.id} title={recipe.name} icon={BookOpen}>
                 <p>{recipe.inputs.flourTotal}g farina · {recipe.inputs.hydration}% idratazione · {recipe.activeProfileId}</p>
-                <p className="text-stone-500">Aggiornata {formatDate(recipe.updatedAt)}</p>
+                <p className="text-[#8d8176]">Aggiornata {formatDate(recipe.updatedAt)}</p>
                 {recipe.notes && <p>{recipe.notes}</p>}
                 <CardActions>
-                  <MiniButton onClick={() => onLoadRecipe(recipe.id)}>Carica</MiniButton>
+                  <MiniButton onClick={() => onLoadRecipe(recipe.id)}>Carica nel planner</MiniButton>
                   <MiniButton onClick={() => onDuplicateRecipe(recipe.id)} icon={Copy}>Duplica</MiniButton>
-                  <MiniButton onClick={() => onCreateJournalFromRecipe(recipe.id)} icon={History}>Journal</MiniButton>
+                  <MiniButton onClick={() => onCreateJournalFromRecipe(recipe.id)} icon={History}>Crea prova</MiniButton>
                   <MiniButton onClick={() => onDeleteRecipe(recipe.id)} icon={Trash2}>Elimina</MiniButton>
                 </CardActions>
               </ArchiveCard>
@@ -312,7 +299,7 @@ export function ArchivePanel({
               {activeTimelineId && timelineRecipeId && (
                 <ActionButton onClick={() => onAssociateTimelineToRecipe(activeTimelineId, timelineRecipeId)} icon={FilePlus2}>Associa a ricetta</ActionButton>
               )}
-              <ActionButton onClick={() => onCreateJournalFromTimeline(activeTimelineId ?? '', timelineRecipeId || undefined)} icon={Play}>Avvia sessione</ActionButton>
+              <ActionButton onClick={() => onCreateJournalFromTimeline(activeTimelineId ?? '', timelineRecipeId || undefined)} icon={Play}>Crea prova</ActionButton>
             </div>
           </ArchiveForm>
 
@@ -322,12 +309,12 @@ export function ArchivePanel({
             ) : archive.timelines.map((timeline) => (
               <ArchiveCard key={timeline.id} title={timeline.name} icon={CalendarDays}>
                 <p>{timeline.steps.length} step · {formatDurationMinutes(timeline.totalDurationMinutes)} totali</p>
-                <p className="text-stone-500">Aggiornata {formatDate(timeline.updatedAt)}</p>
+                <p className="text-[#8d8176]">Aggiornata {formatDate(timeline.updatedAt)}</p>
                 {timeline.notes && <p>{timeline.notes}</p>}
                 <CardActions>
-                  <MiniButton onClick={() => onLoadTimeline(timeline.id)}>Usa</MiniButton>
+                  <MiniButton onClick={() => onLoadTimeline(timeline.id)}>Usa nel piano</MiniButton>
                   <MiniButton onClick={() => onDuplicateTimeline(timeline.id)} icon={Copy}>Duplica</MiniButton>
-                  <MiniButton onClick={() => onCreateJournalFromTimeline(timeline.id)} icon={History}>Journal</MiniButton>
+                  <MiniButton onClick={() => onCreateJournalFromTimeline(timeline.id)} icon={History}>Crea prova</MiniButton>
                   <MiniButton onClick={() => onDeleteTimeline(timeline.id)} icon={Trash2}>Elimina</MiniButton>
                 </CardActions>
               </ArchiveCard>
@@ -338,14 +325,19 @@ export function ArchivePanel({
 
       {activeTab === 'journal' && (
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(300px,0.65fr)_minmax(0,1fr)]">
-          <ArchiveForm title={editingJournalId ? 'Modifica voce journal' : 'Avvia sessione'}>
-            <TextInput label="Titolo sessione" value={journalForm.title} onChange={(value) => setJournalForm((current) => ({ ...current, title: value }))} placeholder="Focaccia alta idratazione" />
+          <ArchiveForm title={editingJournalId ? 'Modifica prova' : 'Registra prova'}>
+            <TextInput label="Titolo prova" value={journalForm.title} onChange={(value) => setJournalForm((current) => ({ ...current, title: value }))} placeholder="Focaccia alta idratazione" />
             <TextInput label="Data" type="date" value={journalForm.date} onChange={(value) => setJournalForm((current) => ({ ...current, date: value }))} />
             <SelectInput
               label="Stato"
               value={journalForm.status}
               onChange={(value) => setJournalForm((current) => ({ ...current, status: value as JournalStatus }))}
-              options={[{ value: 'draft', label: 'Bozza' }, { value: 'completed', label: 'Completata' }]}
+              options={[
+                { value: 'draft', label: 'Bozza' },
+                { value: 'active', label: 'Attiva' },
+                { value: 'scheduled', label: 'Programmata' },
+                { value: 'completed', label: 'Completata' },
+              ]}
             />
             <SelectInput
               label="Ricetta sorgente"
@@ -363,18 +355,23 @@ export function ArchivePanel({
             <TextArea label="Note" value={journalForm.finalNotes} onChange={(value) => setJournalForm((current) => ({ ...current, finalNotes: value }))} />
             <TextArea label="Cosa cambiare la prossima volta" value={journalForm.nextAdjustment} onChange={(value) => setJournalForm((current) => ({ ...current, nextAdjustment: value }))} />
             <div className="grid gap-2 sm:grid-cols-2">
-              <ActionButton onClick={submitJournal} icon={History}>{editingJournalId ? 'Aggiorna voce' : 'Avvia sessione'}</ActionButton>
+              <ActionButton onClick={submitJournal} icon={History}>{editingJournalId ? 'Aggiorna prova' : 'Salva nel Diario'}</ActionButton>
               {editingJournalId && <ActionButton onClick={() => { setEditingJournalId(null); setJournalForm(emptyJournalForm()); }} icon={RotateIcon}>Annulla</ActionButton>}
             </div>
           </ArchiveForm>
 
           <div className="grid gap-3">
             {archive.journal.length === 0 ? (
-              <EmptyState text="Il journal raccoglie le tue prove reali. Quando prepari un impasto, salva una sessione con temperatura, note e risultato." />
+              <EmptyState text="Non hai ancora registrato prove. Quando prepari un impasto, salva una prova con ricetta, timeline, temperatura, note e risultato." />
             ) : archive.journal.map((entry) => (
-              <ArchiveCard key={entry.id} title={`${entry.title} — ${formatDate(entry.date)}`} icon={History}>
-                <p>{entry.sessionData.ambientTemperature} · {entry.recipeSnapshot.inputs.hydration}% · Risultato: {entry.sessionData.resultLabel || 'non indicato'}</p>
+              <ArchiveCard key={entry.id} title={entry.title} icon={History}>
+                <p className="text-[#8d8176]">{formatDate(entry.date)}</p>
+                <p>Risultato: {entry.sessionData.resultLabel || 'non indicato'}</p>
+                {entry.sessionData.finalNotes && <p>{entry.sessionData.finalNotes}</p>}
                 {entry.sessionData.nextAdjustment && <p>Prossima volta: {entry.sessionData.nextAdjustment}</p>}
+                <p className="text-[#8d8176]">
+                  {entry.recipeSnapshot.name} · {entry.timelineSnapshot?.name ?? 'Piano da completare'} · {entry.recipeSnapshot.inputs.hydration}% idratazione · {entry.sessionData.ambientTemperature}
+                </p>
                 <CardActions>
                   <MiniButton onClick={() => editJournal(entry.id)}>Apri</MiniButton>
                   <MiniButton onClick={() => onCreateTrialFromJournal(entry.id)} icon={FilePlus2}>Crea nuova prova</MiniButton>
@@ -392,7 +389,7 @@ export function ArchivePanel({
 
 function ArchiveForm({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-[12px] border border-stone-200 bg-white p-4">
+    <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft">
       <h3 className="text-base font-semibold text-ink">{title}</h3>
       <div className="mt-4 grid gap-3">{children}</div>
     </div>
@@ -409,9 +406,9 @@ function ArchiveCard({
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-[12px] border border-stone-200 bg-white p-4 text-sm leading-5 text-stone-700">
+    <article className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 text-sm leading-5 text-[#6f6257] shadow-inner-soft">
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-cream text-crust ring-1 ring-crust/15">
           <Icon size={18} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
@@ -437,14 +434,14 @@ function TextInput({
   type?: string;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-stone-700">
+    <label className="grid gap-1 text-sm font-semibold text-ink">
       {label}
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-10 rounded-lg border border-stone-300 bg-white px-3 text-base font-medium text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+        className="min-h-10 rounded-2xl border border-[#322e2b24] bg-white px-3 text-base font-medium text-ink outline-none placeholder:text-[#9b9188] focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
       />
     </label>
   );
@@ -462,14 +459,14 @@ function TextArea({
   placeholder?: string;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-stone-700">
+    <label className="grid gap-1 text-sm font-semibold text-ink">
       {label}
       <textarea
         value={value}
         placeholder={placeholder}
         rows={3}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+        className="rounded-2xl border border-[#322e2b24] bg-white px-3 py-2 text-sm font-medium text-ink outline-none placeholder:text-[#9b9188] focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
       />
     </label>
   );
@@ -487,12 +484,12 @@ function SelectInput({
   options: { value: string; label: string }[];
 }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-stone-700">
+    <label className="grid gap-1 text-sm font-semibold text-ink">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-ink outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+        className="min-h-10 rounded-2xl border border-[#322e2b24] bg-white px-3 text-sm font-medium text-ink outline-none focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -515,7 +512,7 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-100"
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-crust/25 bg-cream px-3 text-sm font-semibold text-crust transition hover:border-crust/45 hover:bg-wheat-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(178,104,55,0.18)]"
     >
       <Icon size={16} aria-hidden="true" />
       {children}
@@ -536,7 +533,7 @@ function MiniButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 transition hover:border-amber-300 hover:bg-amber-50"
+      className="inline-flex min-h-9 items-center justify-center gap-1 rounded-full border border-[#322e2b24] bg-white px-3 text-sm font-semibold text-[#6f6257] transition hover:border-crust/35 hover:bg-cream/45 hover:text-ink"
     >
       {Icon && <Icon size={15} aria-hidden="true" />}
       {children}
@@ -550,7 +547,7 @@ function CardActions({ children }: { children: ReactNode }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-[12px] border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center text-sm leading-6 text-stone-600">
+    <div className="rounded-[18px] border border-dashed border-[#322e2b2e] bg-cream/30 px-4 py-8 text-center text-sm leading-6 text-[#6f6257]">
       {text}
     </div>
   );
