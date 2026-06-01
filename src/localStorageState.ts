@@ -1,7 +1,7 @@
 import type { AmbientTemperatureId } from './ambientTemperature';
 import type { CurrentJournalDraft, RecipeSnapshot, TimelineSnapshot } from './archiveTypes';
 import type { BreadInputs } from './calculations';
-import type { ActiveSession, ActiveSessionStep } from './domain/session/activeSessionTypes';
+import type { ActiveSession, ActiveSessionStep, LegacyActiveSessionStatus } from './domain/session/activeSessionTypes';
 import { normalizeActiveSession } from './domain/session/activeSessionUtils';
 import type { GramValues, UnitModes } from './defaults';
 import type { FlourMix } from './flours';
@@ -50,6 +50,11 @@ export type PersistedBreadPlannerState = {
 
 export type LoadedBreadPlannerState = {
   state: PersistedBreadPlannerState;
+  legacyScheduledActiveSession?: PersistedLegacyActiveSession;
+};
+
+export type PersistedLegacyActiveSession = Omit<ActiveSession, 'status'> & {
+  status: LegacyActiveSessionStatus;
 };
 
 const convertibleFields = ['saltPercentage', 'starterPercentage', 'oilPercentage'] as const;
@@ -57,7 +62,8 @@ const temperatureIds = ['cold', 'normal', 'warm'] as const;
 const timerStatuses: TimerStatus[] = ['idle', 'running', 'paused', 'finished'];
 const planningModes: TimelinePlanningMode[] = ['now', 'backward'];
 const journalStatuses = ['draft', 'active', 'scheduled', 'completed'] as const;
-const activeSessionStatuses = ['scheduled', 'running', 'paused', 'completed'] as const;
+const activeSessionStatuses = ['running', 'paused', 'completed'] as const;
+const legacyActiveSessionStatuses = ['scheduled', ...activeSessionStatuses] as const;
 const timelineStepTypes = Object.keys(timelineStepDefinitions) as TimelineStepType[];
 const timelineStepCategories = ['rest', 'fold', 'fermentation', 'shaping', 'cold', 'bake', 'custom'] as TimelineStepCategory[];
 
@@ -189,10 +195,10 @@ const isActiveSessionStep = (value: unknown): value is ActiveSessionStep =>
   (value.completedAt === undefined || isFiniteNumber(value.completedAt)) &&
   (value.skippedAt === undefined || isFiniteNumber(value.skippedAt));
 
-const isActiveSession = (value: unknown): value is ActiveSession =>
+const isPersistedLegacyActiveSession = (value: unknown): value is PersistedLegacyActiveSession =>
   isObject(value) &&
   isString(value.id) &&
-  activeSessionStatuses.includes(value.status as (typeof activeSessionStatuses)[number]) &&
+  legacyActiveSessionStatuses.includes(value.status as (typeof legacyActiveSessionStatuses)[number]) &&
   isRecipeSnapshot(value.recipeSnapshot) &&
   isTimelineSnapshot(value.timelineSnapshot) &&
   (value.journalEntryId === undefined || isString(value.journalEntryId)) &&
@@ -208,6 +214,10 @@ const isActiveSession = (value: unknown): value is ActiveSession =>
   value.stepSchedule.every(isActiveSessionStep) &&
   (value.notificationPermissionAsked === undefined || isBoolean(value.notificationPermissionAsked)) &&
   (value.soundEnabled === undefined || isBoolean(value.soundEnabled));
+
+const isActiveSession = (value: unknown): value is ActiveSession =>
+  isPersistedLegacyActiveSession(value) &&
+  activeSessionStatuses.includes(value.status as (typeof activeSessionStatuses)[number]);
 
 const normalizeTimelinePlanning = (value: unknown): TimelinePlanningState =>
   isTimelinePlanningState(value) ? value : initialTimelinePlanning;
@@ -263,6 +273,17 @@ export const loadPersistedState = (): LoadedBreadPlannerState | null => {
       return null;
     }
 
+    const parsedRecord = parsed as Record<string, unknown>;
+    const persistedActiveSession = isPersistedLegacyActiveSession(parsedRecord.activeSession)
+      ? parsedRecord.activeSession
+      : undefined;
+    const legacyScheduledActiveSession = persistedActiveSession?.status === 'scheduled'
+      ? persistedActiveSession
+      : undefined;
+    const activeSession = isActiveSession(persistedActiveSession)
+      ? normalizeActiveSession(persistedActiveSession)
+      : undefined;
+
     return {
       state: {
         ...parsed,
@@ -271,8 +292,9 @@ export const loadPersistedState = (): LoadedBreadPlannerState | null => {
           timer: finishTimerIfElapsed(parsed.timeline.timer, parsed.timeline.steps),
           planning: normalizeTimelinePlanning(parsed.timeline.planning),
         },
-        activeSession: isActiveSession(parsed.activeSession) ? normalizeActiveSession(parsed.activeSession) : undefined,
+        activeSession,
       },
+      legacyScheduledActiveSession,
     };
   } catch {
     return null;

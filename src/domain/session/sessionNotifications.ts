@@ -67,9 +67,5 @@ export const getSessionDocumentTitle = (session?: ActiveSession) => {
   if (session.status === 'paused') {
     return 'Timer in pausa · Bread Planner';
   }
-  if (session.status === 'scheduled') {
-    return 'Piano programmato · Bread Planner';
-  }
-
   return 'Impasto in corso · Bread Planner';
 };

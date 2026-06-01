@@ -37,33 +37,27 @@ export const createActiveSession = ({
   recipeSnapshot,
   timelineSnapshot,
   journalEntryId,
-  status,
   startedAt,
-  scheduledStartAt,
 }: {
   id: string;
   recipeSnapshot: ActiveSession['recipeSnapshot'];
   timelineSnapshot: TimelineSnapshot;
   journalEntryId?: string;
-  status: Extract<ActiveSession['status'], 'running' | 'scheduled'>;
+  status?: Extract<ActiveSession['status'], 'running'>;
   startedAt?: number;
-  scheduledStartAt?: number;
 }): ActiveSession => {
   const now = Date.now();
-  const sessionStartAt = status === 'scheduled'
-    ? scheduledStartAt ?? now
-    : startedAt ?? now;
+  const sessionStartAt = startedAt ?? now;
   const stepSchedule = buildActiveSessionStepSchedule(timelineSnapshot, sessionStartAt);
 
   return {
     id,
-    status,
+    status: 'running',
     recipeSnapshot,
     timelineSnapshot,
     journalEntryId,
     createdAt: now,
-    scheduledStartAt: status === 'scheduled' ? sessionStartAt : undefined,
-    startedAt: status === 'running' ? sessionStartAt : undefined,
+    startedAt: sessionStartAt,
     accumulatedPauseMs: 0,
     currentStepId: stepSchedule[0]?.stepId,
     stepSchedule,
@@ -86,7 +80,6 @@ export const getActiveSessionDerivedState = (
 ): ActiveSessionDerivedState => {
   const totalDurationMs = getActiveSessionTotalDurationMs(session);
   const elapsedMs = Math.min(getActiveSessionElapsedMs(session, now), totalDurationMs);
-  const isStartDue = session.status === 'scheduled' && Boolean(session.scheduledStartAt && session.scheduledStartAt <= now);
   const isFinishedByTime = totalDurationMs > 0 && elapsedMs >= totalDurationMs;
 
   let accumulatedMs = 0;
@@ -114,7 +107,7 @@ export const getActiveSessionDerivedState = (
     totalDurationMs,
     remainingMs: Math.max(0, totalDurationMs - elapsedMs),
     progressPercentage: totalDurationMs > 0 ? Math.min(100, Math.round(elapsedMs / totalDurationMs * 100)) : 0,
-    isStartDue,
+    isStartDue: false,
     isFinishedByTime,
   };
 };
@@ -139,19 +132,6 @@ export const normalizeActiveSession = (session: ActiveSession, now = Date.now())
     pausedAt: undefined,
     currentStepId: undefined,
   };
-};
-
-export const startScheduledActiveSession = (session: ActiveSession, now = Date.now()): ActiveSession => {
-  const startedAt = session.scheduledStartAt ?? now;
-  return normalizeActiveSession({
-    ...session,
-    status: 'running',
-    startedAt,
-    pausedAt: undefined,
-    scheduledStartAt: session.scheduledStartAt ?? startedAt,
-    stepSchedule: buildActiveSessionStepSchedule(session.timelineSnapshot, startedAt),
-    currentStepId: session.stepSchedule[0]?.stepId,
-  }, now);
 };
 
 export const pauseActiveSession = (session: ActiveSession, now = Date.now()): ActiveSession =>
@@ -230,10 +210,6 @@ export const markActiveSessionNotificationAsked = (session: ActiveSession): Acti
 
 export const activeSessionToTimerState = (session?: ActiveSession): TimerState => {
   if (!session) {
-    return initialTimer;
-  }
-
-  if (session.status === 'scheduled') {
     return initialTimer;
   }
 

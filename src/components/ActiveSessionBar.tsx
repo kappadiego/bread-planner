@@ -21,12 +21,12 @@ type ActiveSessionBarProps = {
   notificationPermission: BrowserNotificationPermission;
   onOpenDrawer: () => void;
   onCloseDrawer: () => void;
-  onStartScheduled: () => void;
   onPause: () => void;
   onResume: () => void;
   onCompleteStep: () => void;
   onSkipStep: () => void;
   onFinish: () => void;
+  onClear: () => void;
   onSaveJournal: () => void;
   onOpenDiary: () => void;
   onRequestNotifications: () => void;
@@ -64,19 +64,6 @@ const formatDurationMinutes = (minutes: number) => {
 
 const getSessionCopy = (session: ActiveSession) => {
   const derived = getActiveSessionDerivedState(session);
-  if (session.status === 'scheduled') {
-    return {
-      label: 'Piano programmato',
-      detail: derived.isStartDue
-        ? 'È ora di iniziare'
-        : `Inizio ${session.scheduledStartAt ? formatClock(session.scheduledStartAt) : 'da definire'}`,
-      tone: 'border-wheat-400/55',
-      accent: 'text-crust',
-      fill: 'bg-wheat-400',
-      track: 'bg-cream',
-      surface: 'bg-cream/45',
-    };
-  }
   if (session.status === 'paused') {
     return {
       label: 'Timer in pausa',
@@ -133,12 +120,12 @@ export function ActiveSessionBar({
   notificationPermission,
   onOpenDrawer,
   onCloseDrawer,
-  onStartScheduled,
   onPause,
   onResume,
   onCompleteStep,
   onSkipStep,
   onFinish,
+  onClear,
   onSaveJournal,
   onOpenDiary,
   onRequestNotifications,
@@ -241,9 +228,7 @@ export function ActiveSessionBar({
             </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {session.status === 'scheduled' ? (
-                <DrawerButton onClick={onStartScheduled} tone="primary" icon={Play}>Avvia piano</DrawerButton>
-              ) : session.status === 'running' ? (
+              {session.status === 'running' ? (
                 <DrawerButton onClick={onPause} tone="primary" icon={Pause}>Pausa</DrawerButton>
               ) : session.status === 'paused' ? (
                 <DrawerButton onClick={onResume} tone="primary" icon={Play}>Riprendi</DrawerButton>
@@ -253,6 +238,7 @@ export function ActiveSessionBar({
               {isActionable && <DrawerButton onClick={onCompleteStep} icon={CheckCircle2}>Completa step</DrawerButton>}
               {isActionable && <DrawerButton onClick={onSkipStep} icon={SkipForward}>Salta step</DrawerButton>}
               {isActionable && <DrawerButton onClick={onFinish}>Termina sessione</DrawerButton>}
+              {!isActionable && <DrawerButton onClick={onClear}>Chiudi sessione</DrawerButton>}
               <DrawerButton onClick={onOpenDiary}>Apri Diario</DrawerButton>
             </div>
 

@@ -114,6 +114,9 @@ const isJournalEntry = (value: unknown): value is JournalEntry => {
       sessionData.status === 'scheduled' ||
       sessionData.status === 'completed'
     ) &&
+    (sessionData.scheduledStartAt === undefined || isNumber(sessionData.scheduledStartAt)) &&
+    (sessionData.targetEndAt === undefined || isNumber(sessionData.targetEndAt)) &&
+    (sessionData.scheduledLabel === undefined || isString(sessionData.scheduledLabel)) &&
     isString(sessionData.initialNotes) &&
     isString(sessionData.finalNotes) &&
     isString(sessionData.resultLabel) &&

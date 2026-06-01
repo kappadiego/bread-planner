@@ -59,12 +59,14 @@ type TimelinePlannerProps = {
   onAmbientTemperatureChange: (value: AmbientTemperatureId) => void;
   onOpenTimelines?: () => void;
   onSaveTimeline?: () => void;
-  onStartTimelineNow?: (timer: TimerState) => void;
+  onStartTimelineNow?: (timer: TimerState) => boolean | void;
   onProgramTimeline?: (planning: TimelinePlanningState, scheduledStartAt?: number) => void;
   onPauseTimer?: () => void;
   onResumeTimer?: () => void;
   onSkipCurrentStep?: () => void;
   onResetTimer?: () => void;
+  liveSessionBlockMessage?: string;
+  onStartBlocked?: () => void;
 };
 
 const formatDigitalDuration = (ms: number) => {
@@ -162,6 +164,8 @@ export function TimelinePlanner({
   onResumeTimer,
   onSkipCurrentStep,
   onResetTimer,
+  liveSessionBlockMessage,
+  onStartBlocked,
 }: TimelinePlannerProps) {
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
   const [appliedSuggestionPresetId, setAppliedSuggestionPresetId] = useState<string | null>(null);
@@ -180,6 +184,7 @@ export function TimelinePlanner({
     totalDurationMs > 0 ? Math.min(100, Math.round((elapsedMs / totalDurationMs) * 100)) : 0;
   const nextStep = currentStepInfo ? steps[currentStepInfo.index + 1] : null;
   const canStart = steps.length > 0 && totalDurationMs > 0;
+  const isStartBlocked = Boolean(liveSessionBlockMessage);
   const suggestedTimeline = useMemo(
     () => buildSuggestedTimeline({
       activeProfileId,
@@ -432,14 +437,27 @@ export function TimelinePlanner({
       return;
     }
 
+    if (isStartBlocked) {
+      onStartBlocked?.();
+      return;
+    }
+
     const nextTimer: TimerState = {
       status: 'running',
       startedAt: Date.now(),
       pausedAt: null,
       accumulatedPauseMs: 0,
     };
+
+    if (onStartTimelineNow) {
+      const didStart = onStartTimelineNow(nextTimer);
+      if (didStart !== false) {
+        onTimerChange(initialTimer);
+      }
+      return;
+    }
+
     onTimerChange(nextTimer);
-    onStartTimelineNow?.(nextTimer);
   };
 
   const pause = () => {
@@ -491,6 +509,11 @@ export function TimelinePlanner({
           {timerRestoreNotice && (
             <p className="mb-4 rounded-2xl bg-proof-50 px-4 py-3 text-sm font-medium text-proof-700 ring-1 ring-proof-100">
               {timerRestoreNotice}
+            </p>
+          )}
+          {liveSessionBlockMessage && (
+            <p className="mb-4 rounded-2xl border border-crust/20 bg-cream/55 px-4 py-3 text-sm font-semibold leading-5 text-ink">
+              {liveSessionBlockMessage}
             </p>
           )}
 

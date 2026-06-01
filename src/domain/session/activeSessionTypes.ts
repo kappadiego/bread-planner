@@ -1,6 +1,8 @@
 import type { RecipeSnapshot, TimelineSnapshot } from '../../archiveTypes';
 
-export type ActiveSessionStatus = 'scheduled' | 'running' | 'paused' | 'completed';
+export type ActiveSessionStatus = 'running' | 'paused' | 'completed';
+
+export type LegacyActiveSessionStatus = ActiveSessionStatus | 'scheduled';
 
 export type ActiveSessionStep = {
   stepId: string;

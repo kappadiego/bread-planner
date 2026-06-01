@@ -68,6 +68,9 @@ export type JournalSessionData = {
   doughTemperature?: number;
   startTime?: string;
   endTime?: string;
+  scheduledStartAt?: number;
+  targetEndAt?: number;
+  scheduledLabel?: string;
   status: JournalStatus;
   initialNotes: string;
   finalNotes: string;

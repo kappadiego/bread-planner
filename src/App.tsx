@@ -55,6 +55,7 @@ import {
   type UnitModes,
 } from './defaults';
 import { formatDiaryDate, toDateInputValue } from './domain/journal/journalDates';
+import { createScheduledJournalEntry } from './domain/journal/scheduledJournal';
 import { sortJournalEntries } from './domain/journal/journalSorting';
 import {
   createJournalEntryFromLegacyDraft,
@@ -65,27 +66,12 @@ import type { ActiveSession } from './domain/session/activeSessionTypes';
 import {
   activeSessionToTimerState,
   completeActiveSession,
-  completeActiveSessionStep,
   createActiveSession,
   getSessionEndDate,
   getSessionPauseMinutes,
   getSessionStartDate,
-  markActiveSessionNotificationAsked,
-  normalizeActiveSession,
-  pauseActiveSession,
-  resumeActiveSession,
-  setActiveSessionSoundEnabled,
-  skipActiveSessionStep,
-  startScheduledActiveSession,
 } from './domain/session/activeSessionUtils';
-import {
-  getBrowserNotificationPermission,
-  getSessionDocumentTitle,
-  playStepSound,
-  requestBrowserNotificationPermission,
-  sendBrowserStepNotification,
-  type BrowserNotificationPermission,
-} from './domain/session/sessionNotifications';
+import { getActiveSessionBlockingMessage, getActiveSessionRecipeName, isBlockingLiveSession } from './domain/session/sessionGuards';
 import { cloneValue } from './domain/shared/cloneValue';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
 import {
@@ -116,11 +102,13 @@ import {
   clearPersistedState,
   loadPersistedState,
   savePersistedState,
+  type PersistedLegacyActiveSession,
   type PersistedBreadPlannerState,
 } from './localStorageState';
 import { timelinePresets, type TimelineStep } from './timeline';
 import type { TimelinePlanningState } from './timelinePlanning';
 import { getCurrentStepInfo, getElapsedMs, getTotalDurationMs, type TimerState } from './timelineUtils';
+import { useActiveSessionController } from './hooks/useActiveSessionController';
 
 type IconProps = {
   size?: number;
@@ -263,6 +251,7 @@ type InitialAppState = {
   planning: TimelinePlanningState;
   currentJournalEntryId?: string;
   legacyCurrentJournalDraft?: CurrentJournalDraft;
+  legacyScheduledActiveSession?: PersistedLegacyActiveSession;
   activeSession?: ActiveSession;
   timerRestoreNotice: string | null;
   wasRestoredFromLocal: boolean;
@@ -284,6 +273,7 @@ const createDefaultAppState = (): InitialAppState => ({
   planning: initialPlanning,
   currentJournalEntryId: undefined,
   legacyCurrentJournalDraft: undefined,
+  legacyScheduledActiveSession: undefined,
   activeSession: undefined,
   timerRestoreNotice: null,
   wasRestoredFromLocal: false,
@@ -312,10 +302,11 @@ const createInitialAppState = (): InitialAppState => {
     timelineIsCustom: loadedState.state.timeline.isCustom ?? loadedState.state.timeline.selectedPresetId === 'custom',
     selectedTimelinePresetId: loadedState.state.timeline.selectedPresetId,
     timelineSteps: cloneTimelineSteps(loadedState.state.timeline.steps),
-    timer: loadedState.state.timeline.timer,
+    timer: loadedState.state.activeSession ? initialTimelineTimer : loadedState.state.timeline.timer,
     planning: loadedState.state.timeline.planning ?? initialPlanning,
     currentJournalEntryId: loadedState.state.currentJournalEntryId,
     legacyCurrentJournalDraft: loadedState.state.currentJournalDraft,
+    legacyScheduledActiveSession: loadedState.legacyScheduledActiveSession,
     activeSession: loadedState.state.activeSession,
     timerRestoreNotice: null,
     wasRestoredFromLocal: true,
@@ -340,11 +331,26 @@ function App() {
   const [currentJournalEntryId, setCurrentJournalEntryId] = useState<string | undefined>(
     initialAppState.currentJournalEntryId,
   );
-  const [activeSession, setActiveSession] = useState<ActiveSession | undefined>(initialAppState.activeSession);
-  const [isActiveSessionDrawerOpen, setIsActiveSessionDrawerOpen] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(
-    getBrowserNotificationPermission,
-  );
+  const {
+    activeSession,
+    setActiveSession,
+    isActiveSessionDrawerOpen,
+    setIsActiveSessionDrawerOpen,
+    openActiveSessionDrawer,
+    closeActiveSessionDrawer,
+    notificationPermission,
+    canStartNewLiveSession,
+    getBlockingActiveSessionMessage,
+    startLiveSession,
+    pauseCurrentActiveSession,
+    resumeCurrentActiveSession,
+    skipCurrentActiveSessionStep,
+    completeCurrentActiveSessionStep,
+    finishCurrentActiveSession,
+    clearActiveSession,
+    requestActiveSessionNotifications,
+    toggleActiveSessionSound,
+  } = useActiveSessionController(initialAppState.activeSession);
   const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
   const [archive, setArchive] = useState<ArchiveState>(loadArchive);
   const [activeArchiveTab, setActiveArchiveTab] = useState<ArchiveTab>('recipes');
@@ -360,7 +366,7 @@ function App() {
   );
   const skipNextPersistRef = useRef(false);
   const legacyDraftMigratedRef = useRef(false);
-  const lastSessionStepRef = useRef<string | undefined>(activeSession?.currentStepId);
+  const legacyScheduledMigratedRef = useRef(false);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
@@ -371,8 +377,7 @@ function App() {
     () => calculateFlourBreakdown(effectiveInputs.flourTotal, flourMix),
     [effectiveInputs.flourTotal, flourMix],
   );
-  const activeSessionTimer = useMemo(() => activeSessionToTimerState(activeSession), [activeSession]);
-  const timelineTimer = activeSession ? activeSessionTimer : timer;
+  const timelineTimer = timer;
 
   useEffect(() => {
     if (skipNextPersistRef.current) {
@@ -428,52 +433,6 @@ function App() {
   }, [archive]);
 
   useEffect(() => {
-    if (!activeSession || (activeSession.status !== 'running' && activeSession.status !== 'scheduled')) {
-      return undefined;
-    }
-
-    const interval = window.setInterval(() => {
-      setActiveSession((current) => (current ? normalizeActiveSession(current) : current));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [activeSession]);
-
-  useEffect(() => {
-    document.title = getSessionDocumentTitle(activeSession);
-    return () => {
-      document.title = 'Bread Planner';
-    };
-  }, [activeSession]);
-
-  useEffect(() => {
-    const currentStepId = activeSession?.currentStepId;
-    if (!activeSession) {
-      lastSessionStepRef.current = currentStepId;
-      return;
-    }
-
-    if (activeSession.status !== 'running') {
-      lastSessionStepRef.current = currentStepId;
-      return;
-    }
-
-    const previousStepId = lastSessionStepRef.current;
-    if (previousStepId && currentStepId && previousStepId !== currentStepId) {
-      const nextStep = activeSession.stepSchedule.find((step) => step.stepId === currentStepId);
-      const message = nextStep
-        ? `Ora tocca a ${nextStep.label}.`
-        : 'Controlla il prossimo passaggio.';
-      sendBrowserStepNotification('Bread Planner', message);
-      if (activeSession.soundEnabled) {
-        playStepSound();
-      }
-    }
-
-    lastSessionStepRef.current = currentStepId;
-  }, [activeSession]);
-
-  useEffect(() => {
     if (legacyDraftMigratedRef.current || !initialAppState.legacyCurrentJournalDraft) {
       return;
     }
@@ -497,6 +456,41 @@ function App() {
     });
     setCurrentJournalEntryId(migratedEntry.id);
   }, [initialAppState.legacyCurrentJournalDraft]);
+
+  useEffect(() => {
+    const legacySession = initialAppState.legacyScheduledActiveSession;
+    if (legacyScheduledMigratedRef.current || !legacySession) {
+      return;
+    }
+
+    legacyScheduledMigratedRef.current = true;
+    const scheduledStartAt = legacySession.scheduledStartAt ?? legacySession.createdAt;
+    const targetEndAt = scheduledStartAt + legacySession.timelineSnapshot.totalDurationMinutes * 60 * 1000;
+    const migratedEntry = createScheduledJournalEntry({
+      id: legacySession.journalEntryId ?? createArchiveId('journal'),
+      recipeSnapshot: legacySession.recipeSnapshot,
+      timelineSnapshot: legacySession.timelineSnapshot,
+      ambientTemperature: legacySession.recipeSnapshot.ambientTemperature,
+      planning: {
+        mode: 'backward',
+        targetEndDate: toDateInputValue(targetEndAt),
+        targetEndTime: new Date(targetEndAt).toTimeString().slice(0, 5),
+      },
+      scheduledStartAt,
+      targetEndAt,
+      existingEntry: legacySession.journalEntryId
+        ? archive.journal.find((entry) => entry.id === legacySession.journalEntryId)
+        : undefined,
+    });
+
+    setArchive((current) => (
+      current.journal.some((journalEntry) => journalEntry.id === migratedEntry.id)
+        ? updateJournalEntry(current, migratedEntry)
+        : addJournalEntry(current, migratedEntry)
+    ));
+    setCurrentJournalEntryId(migratedEntry.id);
+    setArchiveMessage('Sessione programmata spostata nel Diario. La sessione attiva resta libera.');
+  }, [archive.journal, initialAppState.legacyScheduledActiveSession]);
 
   useEffect(() => {
     if (activeView === 'planner') {
@@ -665,82 +659,67 @@ function App() {
     setTimer(nextTimer);
   };
 
-  const canReplaceActiveSession = () => {
-    if (!activeSession || activeSession.status === 'completed') {
-      return true;
-    }
-
-    return window.confirm('C’è già una sessione attiva. Vuoi sostituirla con questa timeline?');
-  };
-
-  const createActiveSessionFromCurrentTimeline = ({
-    status,
-    scheduledStartAt,
-    nextTimer,
-    nextPlanning = planning,
-  }: {
-    status: Extract<ActiveSession['status'], 'running' | 'scheduled'>;
-    scheduledStartAt?: number;
-    nextTimer?: TimerState;
-    nextPlanning?: TimelinePlanningState;
-  }) => {
+  const validateTimelineSessionReady = () => {
     if (!isFlourMixValid(flourMix)) {
       setArchiveMessage('Completa il mix farine al 100% prima di avviare una sessione.');
       setActivePlannerSection('planner');
       setActiveView('planner');
-      return;
+      return false;
     }
 
     if (timelineSteps.length === 0 || getTotalDurationMs(timelineSteps) <= 0) {
       setArchiveMessage('Aggiungi una timeline con durata valida prima di avviare una sessione.');
       setActivePlannerSection('times');
       setActiveView('planner');
-      return;
+      return false;
     }
 
-    if (!canReplaceActiveSession()) {
-      return;
+    return true;
+  };
+
+  const startActiveSessionNow = (nextTimer: TimerState) => {
+    if (!validateTimelineSessionReady()) {
+      return false;
     }
 
-    const journalStatus: Extract<JournalStatus, 'active' | 'scheduled'> = status === 'scheduled' ? 'scheduled' : 'active';
+    if (!canStartNewLiveSession) {
+      setArchiveMessage(getBlockingActiveSessionMessage());
+      setActivePlannerSection('times');
+      setActiveView('planner');
+      return false;
+    }
+
     const entry = updateCurrentJournalEntryFromTimeline(
-      journalStatus,
+      'active',
       nextTimer,
-      nextPlanning,
-      status === 'scheduled' || timelineIsCustom,
+      { ...planning, mode: 'now' },
+      timelineIsCustom,
     );
     const session = createActiveSession({
       id: createArchiveId('session'),
       recipeSnapshot: entry.recipeSnapshot,
       timelineSnapshot: entry.timelineSnapshot ?? createTimelineSnapshotFromCurrentTimeline(timelineName, ''),
       journalEntryId: entry.id,
-      status,
       startedAt: nextTimer?.startedAt ?? Date.now(),
-      scheduledStartAt,
     });
 
-    setActiveSession(session);
-    setIsActiveSessionDrawerOpen(true);
-    setNotificationPermission(getBrowserNotificationPermission());
-    setTimer(activeSessionToTimerState(session));
-
-    if (status === 'running' && !session.notificationPermissionAsked) {
-      requestBrowserNotificationPermission().then((permission) => {
-        setNotificationPermission(permission);
-        setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
-      });
+    const result = startLiveSession(session);
+    if (!result.ok) {
+      setArchiveMessage(result.message);
+      return false;
     }
+    return true;
   };
 
-  const startActiveSessionNow = (nextTimer: TimerState) => {
-    createActiveSessionFromCurrentTimeline({
-      status: 'running',
-      nextTimer,
-      nextPlanning: { ...planning, mode: 'now' },
-    });
+  const getPlanningTargetEndAt = (nextPlanning: TimelinePlanningState) => {
+    if (!nextPlanning.targetEndDate || !nextPlanning.targetEndTime) {
+      return undefined;
+    }
+    const targetEndAt = new Date(`${nextPlanning.targetEndDate}T${nextPlanning.targetEndTime}`).getTime();
+    return Number.isFinite(targetEndAt) ? targetEndAt : undefined;
   };
 
-  const programActiveSession = (nextPlanning: TimelinePlanningState, scheduledStartAt?: number) => {
+  const programTimelineInDiary = (nextPlanning: TimelinePlanningState, scheduledStartAt?: number) => {
     if (!scheduledStartAt) {
       setArchiveMessage('Scegli giorno e ora di fine validi per programmare il piano.');
       setActivePlannerSection('times');
@@ -748,59 +727,45 @@ function App() {
       return;
     }
 
-    createActiveSessionFromCurrentTimeline({
-      status: 'scheduled',
-      scheduledStartAt,
-      nextPlanning,
-    });
-  };
-
-  const updateActiveSessionState = (updater: (session: ActiveSession) => ActiveSession) => {
-    setActiveSession((current) => {
-      if (!current) {
-        return current;
-      }
-      const updated = updater(current);
-      setTimer(activeSessionToTimerState(updated));
-      return updated;
-    });
-  };
-
-  const pauseCurrentActiveSession = () => updateActiveSessionState((session) => pauseActiveSession(session));
-
-  const resumeCurrentActiveSession = () => updateActiveSessionState((session) => resumeActiveSession(session));
-
-  const startScheduledCurrentSession = () => {
-    updateActiveSessionState((session) => startScheduledActiveSession(session));
-    requestBrowserNotificationPermission().then((permission) => {
-      setNotificationPermission(permission);
-      setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
-    });
-  };
-
-  const skipCurrentActiveSessionStep = () => updateActiveSessionState((session) => skipActiveSessionStep(session));
-
-  const completeCurrentActiveSessionStep = () => updateActiveSessionState((session) => completeActiveSessionStep(session));
-
-  const finishCurrentActiveSession = () => updateActiveSessionState((session) => completeActiveSession(session));
-
-  const resetActiveSessionTimer = () => {
-    if (activeSession && activeSession.status !== 'completed' && !window.confirm('Interrompere la sessione attiva?')) {
+    if (!validateTimelineSessionReady()) {
       return;
     }
-    setActiveSession(undefined);
-    setIsActiveSessionDrawerOpen(false);
-  };
 
-  const requestActiveSessionNotifications = () => {
-    requestBrowserNotificationPermission().then((permission) => {
-      setNotificationPermission(permission);
-      setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
+    const recipeSnapshot = createRecipeSnapshotFromCurrentPlanner('', '');
+    const timelineSnapshot = createTimelineSnapshotFromCurrentTimeline(timelineName, '');
+    const existingEntry = currentJournalEntryId
+      ? archive.journal.find((entry) => (
+          entry.id === currentJournalEntryId &&
+          (entry.sessionData.status === 'draft' || entry.sessionData.status === 'scheduled')
+        ))
+      : undefined;
+    const scheduledEntry = createScheduledJournalEntry({
+      id: existingEntry?.id ?? createArchiveId('journal'),
+      recipeSnapshot,
+      timelineSnapshot,
+      ambientTemperature,
+      scheduledStartAt,
+      targetEndAt: getPlanningTargetEndAt(nextPlanning) ?? scheduledStartAt + timelineSnapshot.totalDurationMinutes * 60 * 1000,
+      planning: nextPlanning,
+      existingEntry,
+      sourceRecipeId: activeRecipeId,
+      sourceTimelineId: timelineIsCustom ? undefined : activeTimelineId,
     });
-  };
 
-  const toggleActiveSessionSound = () => {
-    updateActiveSessionState((session) => setActiveSessionSoundEnabled(session, !session.soundEnabled));
+    setArchive((current) => (
+      current.journal.some((journalEntry) => journalEntry.id === scheduledEntry.id)
+        ? updateJournalEntry(current, scheduledEntry)
+        : addJournalEntry(current, scheduledEntry)
+    ));
+    setCurrentJournalEntryId(scheduledEntry.id);
+    setTimer(initialTimelineTimer);
+    setArchiveMessage(
+      activeSession
+        ? 'Sessione programmata nel Diario. La sessione attiva resta in corso.'
+        : 'Sessione programmata nel Diario.',
+    );
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const clearLocalMemory = () => {
@@ -1187,6 +1152,55 @@ function App() {
     setActiveView('planner');
   };
 
+  const startScheduledJournalEntry = (entryId: string) => {
+    const entry = archive.journal.find((item) => item.id === entryId);
+    if (!entry || entry.sessionData.status !== 'scheduled') {
+      return;
+    }
+
+    if (!entry.timelineSnapshot) {
+      setArchiveMessage('Questa sessione programmata non ha una timeline valida.');
+      return;
+    }
+
+    if (isBlockingLiveSession(activeSession)) {
+      setArchiveMessage(getActiveSessionBlockingMessage(activeSession));
+      openActiveSessionDrawer();
+      return;
+    }
+
+    const startedAt = Date.now();
+    const session = createActiveSession({
+      id: createArchiveId('session'),
+      recipeSnapshot: entry.recipeSnapshot,
+      timelineSnapshot: entry.timelineSnapshot,
+      journalEntryId: entry.id,
+      startedAt,
+    });
+    const result = startLiveSession(session);
+    if (!result.ok) {
+      setArchiveMessage(result.message);
+      return;
+    }
+
+    const updatedEntry: JournalEntry = {
+      ...entry,
+      updatedAt: startedAt,
+      timerState: activeSessionToTimerState(session),
+      sessionData: {
+        ...entry.sessionData,
+        status: 'active',
+        startTime: new Date(startedAt).toTimeString().slice(0, 5),
+      },
+    };
+
+    setArchive((current) => updateJournalEntry(current, updatedEntry));
+    setCurrentJournalEntryId(entry.id);
+    setArchiveMessage(`Sessione avviata dal Diario: ${entry.title}.`);
+    setActivePlannerSection('diary');
+    setActiveView('planner');
+  };
+
   const saveRecipeToArchive = (name: string, notes: string, associatedTimelineId?: string) => {
     const recipe = createSavedRecipe(name, notes, associatedTimelineId);
     setArchive((current) => addRecipe(current, recipe));
@@ -1554,7 +1568,7 @@ function App() {
         onOpenPlanner={openPlanner}
         onOpenRecipes={() => openArchiveTab('recipes')}
         onOpenTimelines={() => openArchiveTab('timelines')}
-        onOpenActiveSession={() => setIsActiveSessionDrawerOpen(true)}
+        onOpenActiveSession={openActiveSessionDrawer}
         onReset={reset}
       />
 
@@ -1563,19 +1577,23 @@ function App() {
           session={activeSession}
           isDrawerOpen={isActiveSessionDrawerOpen}
           notificationPermission={notificationPermission}
-          onOpenDrawer={() => setIsActiveSessionDrawerOpen(true)}
-          onCloseDrawer={() => setIsActiveSessionDrawerOpen(false)}
-          onStartScheduled={startScheduledCurrentSession}
+          onOpenDrawer={openActiveSessionDrawer}
+          onCloseDrawer={closeActiveSessionDrawer}
           onPause={pauseCurrentActiveSession}
           onResume={resumeCurrentActiveSession}
           onCompleteStep={completeCurrentActiveSessionStep}
           onSkipStep={skipCurrentActiveSessionStep}
           onFinish={finishCurrentActiveSession}
+          onClear={() => {
+            if (window.confirm('Chiudere la sessione completata senza salvarla nel Diario?')) {
+              clearActiveSession(false);
+            }
+          }}
           onSaveJournal={saveActiveSessionToJournal}
           onOpenDiary={() => {
             setActivePlannerSection('diary');
             setActiveView('planner');
-            setIsActiveSessionDrawerOpen(false);
+            closeActiveSessionDrawer();
           }}
           onRequestNotifications={requestActiveSessionNotifications}
           onToggleSound={toggleActiveSessionSound}
@@ -1675,12 +1693,17 @@ function App() {
             onStartTimelineNow={startActiveSessionNow}
             onProgramTimeline={(nextPlanning, scheduledStartAt) => {
               updateTimelinePlanningAsCustom(nextPlanning);
-              programActiveSession(nextPlanning, scheduledStartAt);
+              programTimelineInDiary(nextPlanning, scheduledStartAt);
             }}
-            onPauseTimer={pauseCurrentActiveSession}
-            onResumeTimer={resumeCurrentActiveSession}
-            onSkipCurrentStep={skipCurrentActiveSessionStep}
-            onResetTimer={resetActiveSessionTimer}
+            liveSessionBlockMessage={activeSession
+              ? activeSession.status === 'completed'
+                ? getActiveSessionBlockingMessage(activeSession)
+                : `Sessione in corso: ${getActiveSessionRecipeName(activeSession)}. Puoi programmare questo piano per dopo, ma non avviarlo ora.`
+              : undefined}
+            onStartBlocked={() => {
+              setArchiveMessage(getActiveSessionBlockingMessage(activeSession));
+              openActiveSessionDrawer();
+            }}
           />
             ) : (
           <DiaryPanel
@@ -1695,6 +1718,8 @@ function App() {
             onLoadJournalTimeline={loadJournalTimelineIntoPlanner}
             onCreateTrialFromJournal={createNewTrialFromJournal}
             onResumeSession={() => setActivePlannerSection('times')}
+            activeSessionBlockMessage={activeSession ? getActiveSessionBlockingMessage(activeSession) : ''}
+            onStartScheduledJournalEntry={startScheduledJournalEntry}
             onSaveJournalRecipe={saveJournalRecipeToArchive}
             onSaveJournalTimeline={saveJournalTimelineToArchive}
           />
@@ -1789,6 +1814,8 @@ function DiaryPanel({
   onLoadJournalTimeline,
   onCreateTrialFromJournal,
   onResumeSession,
+  activeSessionBlockMessage,
+  onStartScheduledJournalEntry,
   onSaveJournalRecipe,
   onSaveJournalTimeline,
 }: {
@@ -1803,6 +1830,8 @@ function DiaryPanel({
   onLoadJournalTimeline: (entryId: string) => void;
   onCreateTrialFromJournal: (entryId: string) => void;
   onResumeSession: () => void;
+  activeSessionBlockMessage: string;
+  onStartScheduledJournalEntry: (entryId: string) => void;
   onSaveJournalRecipe: (entryId: string) => void;
   onSaveJournalTimeline: (entryId: string) => void;
 }) {
@@ -1866,6 +1895,8 @@ function DiaryPanel({
         onLoadJournalSnapshot={() => onLoadJournalSnapshot(selectedEntry.id)}
         onCreateTrialFromJournal={() => onCreateTrialFromJournal(selectedEntry.id)}
         onDeleteJournalEntry={() => onDeleteJournalEntry(selectedEntry.id)}
+        activeSessionBlockMessage={activeSessionBlockMessage}
+        onStartScheduledJournalEntry={() => onStartScheduledJournalEntry(selectedEntry.id)}
         isRecipeSaved={Boolean(selectedEntry.sourceRecipeId && archive.recipes.some((recipe) => recipe.id === selectedEntry.sourceRecipeId))}
         isTimelineSaved={Boolean(selectedEntry.sourceTimelineId && archive.timelines.some((timeline) => timeline.id === selectedEntry.sourceTimelineId))}
       />
@@ -1900,6 +1931,8 @@ function DiaryPanel({
             isCurrent={entry.id === currentJournalEntryId}
             onOpen={() => openEntry(entry)}
             onResume={entry.sessionData.status === 'active' ? onResumeSession : undefined}
+            onStartScheduled={entry.sessionData.status === 'scheduled' ? () => onStartScheduledJournalEntry(entry.id) : undefined}
+            activeSessionBlockMessage={activeSessionBlockMessage}
           />
         ))}
       </div>
@@ -1917,18 +1950,36 @@ type JournalEditorValues = {
   nextAdjustment: string;
 };
 
+const formatScheduledDateTime = (value?: number) => {
+  if (!value) {
+    return 'Orario da definire';
+  }
+  return new Intl.DateTimeFormat('it-IT', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+};
+
 function DiaryEntryCard({
   entry,
   isCurrent,
   onOpen,
   onResume,
+  onStartScheduled,
+  activeSessionBlockMessage,
 }: {
   entry: JournalEntry;
   isCurrent: boolean;
   onOpen: () => void;
   onResume?: () => void;
+  onStartScheduled?: () => void;
+  activeSessionBlockMessage: string;
 }) {
   const visual = journalStatusVisuals[entry.sessionData.status];
+  const isScheduledBlocked = Boolean(onStartScheduled && activeSessionBlockMessage);
 
   return (
     <article
@@ -1952,6 +2003,11 @@ function DiaryEntryCard({
             <StatusBadge status={entry.sessionData.status} />
           </div>
           <p className="mt-1 text-[#8d8176]">{formatDiaryDate(entry.date)}</p>
+          {entry.sessionData.status === 'scheduled' && (
+            <p className="mt-2 font-semibold text-ink">
+              Programmata: {formatScheduledDateTime(entry.sessionData.scheduledStartAt)}
+            </p>
+          )}
           {entry.sessionData.resultLabel && (
             <p className="mt-2 font-medium text-ink">Risultato: {entry.sessionData.resultLabel}</p>
           )}
@@ -1978,6 +2034,24 @@ function DiaryEntryCard({
               Riprendi
             </DiaryActionButton>
           )}
+          {onStartScheduled && (
+            <div className="grid gap-1">
+              <DiaryActionButton
+                disabled={isScheduledBlocked}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onStartScheduled();
+                }}
+              >
+                Avvia sessione
+              </DiaryActionButton>
+              {isScheduledBlocked && (
+                <span className="max-w-[220px] text-xs font-semibold leading-4 text-[#6f6257]">
+                  Hai già una sessione in corso
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </article>
@@ -1999,6 +2073,8 @@ function DiaryEntryEditor({
   onLoadJournalSnapshot,
   onCreateTrialFromJournal,
   onDeleteJournalEntry,
+  activeSessionBlockMessage,
+  onStartScheduledJournalEntry,
   isRecipeSaved,
   isTimelineSaved,
 }: {
@@ -2016,11 +2092,14 @@ function DiaryEntryEditor({
   onLoadJournalSnapshot: () => void;
   onCreateTrialFromJournal: () => void;
   onDeleteJournalEntry: () => void;
+  activeSessionBlockMessage: string;
+  onStartScheduledJournalEntry: () => void;
   isRecipeSaved: boolean;
   isTimelineSaved: boolean;
 }) {
   const recipeName = getReadableRecipeName(entry.recipeSnapshot, entry.title);
   const timelineName = getReadableTimelineName(entry.timelineSnapshot?.name, entry.timelineSnapshot ? personalizedTimelineName : unsavedTimelineName);
+  const isScheduledBlocked = Boolean(activeSessionBlockMessage);
 
   return (
     <section className="grid gap-5">
@@ -2051,7 +2130,30 @@ function DiaryEntryEditor({
             Riprendi
           </button>
         )}
+        {entry.sessionData.status === 'scheduled' && (
+          <div className="grid gap-1 sm:justify-items-end">
+            <button
+              type="button"
+              onClick={onStartScheduledJournalEntry}
+              disabled={isScheduledBlocked}
+              className="bp-focus inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-crust bg-crust px-4 text-sm font-semibold text-white transition hover:border-[#925028] hover:bg-[#925028] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Play size={16} aria-hidden="true" />
+              Avvia sessione
+            </button>
+            {isScheduledBlocked && (
+              <p className="max-w-[240px] text-right text-xs font-semibold leading-4 text-[#6f6257]">
+                Hai già una sessione in corso
+              </p>
+            )}
+          </div>
+        )}
       </div>
+      {entry.sessionData.status === 'scheduled' && (
+        <p className="rounded-2xl border border-wheat/25 bg-wheat/15 px-4 py-3 text-sm font-semibold text-ink">
+          Programmata: {formatScheduledDateTime(entry.sessionData.scheduledStartAt)}
+        </p>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
         <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4 shadow-inner-soft">
