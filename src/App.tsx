@@ -35,6 +35,7 @@ import {
   type AmbientTemperatureId,
 } from './ambientTemperature';
 import { calculateBread, type BreadInputs, roundGram } from './calculations';
+import { ActiveSessionBar } from './components/ActiveSessionBar';
 import { ArchivePanel } from './components/ArchivePanel';
 import { FlourMixEditor } from './components/FlourMixEditor';
 import { TimelinePlanner } from './components/TimelinePlanner';
@@ -60,6 +61,31 @@ import {
   createJournalSnapshot,
   getFallbackJournalTitle,
 } from './domain/journal/journalSnapshots';
+import type { ActiveSession } from './domain/session/activeSessionTypes';
+import {
+  activeSessionToTimerState,
+  completeActiveSession,
+  completeActiveSessionStep,
+  createActiveSession,
+  getSessionEndDate,
+  getSessionPauseMinutes,
+  getSessionStartDate,
+  markActiveSessionNotificationAsked,
+  normalizeActiveSession,
+  pauseActiveSession,
+  resumeActiveSession,
+  setActiveSessionSoundEnabled,
+  skipActiveSessionStep,
+  startScheduledActiveSession,
+} from './domain/session/activeSessionUtils';
+import {
+  getBrowserNotificationPermission,
+  getSessionDocumentTitle,
+  playStepSound,
+  requestBrowserNotificationPermission,
+  sendBrowserStepNotification,
+  type BrowserNotificationPermission,
+} from './domain/session/sessionNotifications';
 import { cloneValue } from './domain/shared/cloneValue';
 import { doughProfiles, type DoughProfile } from './doughProfiles';
 import {
@@ -237,6 +263,7 @@ type InitialAppState = {
   planning: TimelinePlanningState;
   currentJournalEntryId?: string;
   legacyCurrentJournalDraft?: CurrentJournalDraft;
+  activeSession?: ActiveSession;
   timerRestoreNotice: string | null;
   wasRestoredFromLocal: boolean;
 };
@@ -257,6 +284,7 @@ const createDefaultAppState = (): InitialAppState => ({
   planning: initialPlanning,
   currentJournalEntryId: undefined,
   legacyCurrentJournalDraft: undefined,
+  activeSession: undefined,
   timerRestoreNotice: null,
   wasRestoredFromLocal: false,
 });
@@ -288,6 +316,7 @@ const createInitialAppState = (): InitialAppState => {
     planning: loadedState.state.timeline.planning ?? initialPlanning,
     currentJournalEntryId: loadedState.state.currentJournalEntryId,
     legacyCurrentJournalDraft: loadedState.state.currentJournalDraft,
+    activeSession: loadedState.state.activeSession,
     timerRestoreNotice: null,
     wasRestoredFromLocal: true,
   };
@@ -311,6 +340,11 @@ function App() {
   const [currentJournalEntryId, setCurrentJournalEntryId] = useState<string | undefined>(
     initialAppState.currentJournalEntryId,
   );
+  const [activeSession, setActiveSession] = useState<ActiveSession | undefined>(initialAppState.activeSession);
+  const [isActiveSessionDrawerOpen, setIsActiveSessionDrawerOpen] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(
+    getBrowserNotificationPermission,
+  );
   const [timerRestoreNotice, setTimerRestoreNotice] = useState<string | null>(initialAppState.timerRestoreNotice);
   const [archive, setArchive] = useState<ArchiveState>(loadArchive);
   const [activeArchiveTab, setActiveArchiveTab] = useState<ArchiveTab>('recipes');
@@ -326,6 +360,7 @@ function App() {
   );
   const skipNextPersistRef = useRef(false);
   const legacyDraftMigratedRef = useRef(false);
+  const lastSessionStepRef = useRef<string | undefined>(activeSession?.currentStepId);
 
   const effectiveInputs = useMemo(
     () => getEffectiveInputs(inputs, unitModes, gramValues),
@@ -336,6 +371,8 @@ function App() {
     () => calculateFlourBreakdown(effectiveInputs.flourTotal, flourMix),
     [effectiveInputs.flourTotal, flourMix],
   );
+  const activeSessionTimer = useMemo(() => activeSessionToTimerState(activeSession), [activeSession]);
+  const timelineTimer = activeSession ? activeSessionTimer : timer;
 
   useEffect(() => {
     if (skipNextPersistRef.current) {
@@ -358,16 +395,18 @@ function App() {
         isCustom: timelineIsCustom,
         selectedPresetId: selectedTimelinePresetId,
         steps: timelineSteps,
-        timer,
+        timer: timelineTimer,
         planning,
       },
       currentJournalEntryId,
+      activeSession,
     };
 
     savePersistedState(stateToPersist);
     setLocalMemoryMessage('Stato salvato localmente.');
   }, [
     activeProfileId,
+    activeSession,
     ambientTemperature,
     customProfileName,
     currentJournalEntryId,
@@ -379,6 +418,7 @@ function App() {
     timelineIsCustom,
     timelineName,
     timelineSteps,
+    timelineTimer,
     timer,
     unitModes,
   ]);
@@ -386,6 +426,52 @@ function App() {
   useEffect(() => {
     saveArchive(archive);
   }, [archive]);
+
+  useEffect(() => {
+    if (!activeSession || (activeSession.status !== 'running' && activeSession.status !== 'scheduled')) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      setActiveSession((current) => (current ? normalizeActiveSession(current) : current));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [activeSession]);
+
+  useEffect(() => {
+    document.title = getSessionDocumentTitle(activeSession);
+    return () => {
+      document.title = 'Bread Planner';
+    };
+  }, [activeSession]);
+
+  useEffect(() => {
+    const currentStepId = activeSession?.currentStepId;
+    if (!activeSession) {
+      lastSessionStepRef.current = currentStepId;
+      return;
+    }
+
+    if (activeSession.status !== 'running') {
+      lastSessionStepRef.current = currentStepId;
+      return;
+    }
+
+    const previousStepId = lastSessionStepRef.current;
+    if (previousStepId && currentStepId && previousStepId !== currentStepId) {
+      const nextStep = activeSession.stepSchedule.find((step) => step.stepId === currentStepId);
+      const message = nextStep
+        ? `Ora tocca a ${nextStep.label}.`
+        : 'Controlla il prossimo passaggio.';
+      sendBrowserStepNotification('Bread Planner', message);
+      if (activeSession.soundEnabled) {
+        playStepSound();
+      }
+    }
+
+    lastSessionStepRef.current = currentStepId;
+  }, [activeSession]);
 
   useEffect(() => {
     if (legacyDraftMigratedRef.current || !initialAppState.legacyCurrentJournalDraft) {
@@ -490,6 +576,8 @@ function App() {
     setTimer(defaultState.timer);
     setPlanning(defaultState.planning);
     setCurrentJournalEntryId(defaultState.currentJournalEntryId);
+    setActiveSession(undefined);
+    setIsActiveSessionDrawerOpen(false);
     setTimerRestoreNotice(null);
     setActiveProfileId(defaultState.activeProfileId);
     setCustomProfileName(defaultState.customProfileName);
@@ -575,6 +663,144 @@ function App() {
   const updateTimelineTimer = (nextTimer: TimerState) => {
     setTimerRestoreNotice(null);
     setTimer(nextTimer);
+  };
+
+  const canReplaceActiveSession = () => {
+    if (!activeSession || activeSession.status === 'completed') {
+      return true;
+    }
+
+    return window.confirm('C’è già una sessione attiva. Vuoi sostituirla con questa timeline?');
+  };
+
+  const createActiveSessionFromCurrentTimeline = ({
+    status,
+    scheduledStartAt,
+    nextTimer,
+    nextPlanning = planning,
+  }: {
+    status: Extract<ActiveSession['status'], 'running' | 'scheduled'>;
+    scheduledStartAt?: number;
+    nextTimer?: TimerState;
+    nextPlanning?: TimelinePlanningState;
+  }) => {
+    if (!isFlourMixValid(flourMix)) {
+      setArchiveMessage('Completa il mix farine al 100% prima di avviare una sessione.');
+      setActivePlannerSection('planner');
+      setActiveView('planner');
+      return;
+    }
+
+    if (timelineSteps.length === 0 || getTotalDurationMs(timelineSteps) <= 0) {
+      setArchiveMessage('Aggiungi una timeline con durata valida prima di avviare una sessione.');
+      setActivePlannerSection('times');
+      setActiveView('planner');
+      return;
+    }
+
+    if (!canReplaceActiveSession()) {
+      return;
+    }
+
+    const journalStatus: Extract<JournalStatus, 'active' | 'scheduled'> = status === 'scheduled' ? 'scheduled' : 'active';
+    const entry = updateCurrentJournalEntryFromTimeline(
+      journalStatus,
+      nextTimer,
+      nextPlanning,
+      status === 'scheduled' || timelineIsCustom,
+    );
+    const session = createActiveSession({
+      id: createArchiveId('session'),
+      recipeSnapshot: entry.recipeSnapshot,
+      timelineSnapshot: entry.timelineSnapshot ?? createTimelineSnapshotFromCurrentTimeline(timelineName, ''),
+      journalEntryId: entry.id,
+      status,
+      startedAt: nextTimer?.startedAt ?? Date.now(),
+      scheduledStartAt,
+    });
+
+    setActiveSession(session);
+    setIsActiveSessionDrawerOpen(true);
+    setNotificationPermission(getBrowserNotificationPermission());
+    setTimer(activeSessionToTimerState(session));
+
+    if (status === 'running' && !session.notificationPermissionAsked) {
+      requestBrowserNotificationPermission().then((permission) => {
+        setNotificationPermission(permission);
+        setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
+      });
+    }
+  };
+
+  const startActiveSessionNow = (nextTimer: TimerState) => {
+    createActiveSessionFromCurrentTimeline({
+      status: 'running',
+      nextTimer,
+      nextPlanning: { ...planning, mode: 'now' },
+    });
+  };
+
+  const programActiveSession = (nextPlanning: TimelinePlanningState, scheduledStartAt?: number) => {
+    if (!scheduledStartAt) {
+      setArchiveMessage('Scegli giorno e ora di fine validi per programmare il piano.');
+      setActivePlannerSection('times');
+      setActiveView('planner');
+      return;
+    }
+
+    createActiveSessionFromCurrentTimeline({
+      status: 'scheduled',
+      scheduledStartAt,
+      nextPlanning,
+    });
+  };
+
+  const updateActiveSessionState = (updater: (session: ActiveSession) => ActiveSession) => {
+    setActiveSession((current) => {
+      if (!current) {
+        return current;
+      }
+      const updated = updater(current);
+      setTimer(activeSessionToTimerState(updated));
+      return updated;
+    });
+  };
+
+  const pauseCurrentActiveSession = () => updateActiveSessionState((session) => pauseActiveSession(session));
+
+  const resumeCurrentActiveSession = () => updateActiveSessionState((session) => resumeActiveSession(session));
+
+  const startScheduledCurrentSession = () => {
+    updateActiveSessionState((session) => startScheduledActiveSession(session));
+    requestBrowserNotificationPermission().then((permission) => {
+      setNotificationPermission(permission);
+      setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
+    });
+  };
+
+  const skipCurrentActiveSessionStep = () => updateActiveSessionState((session) => skipActiveSessionStep(session));
+
+  const completeCurrentActiveSessionStep = () => updateActiveSessionState((session) => completeActiveSessionStep(session));
+
+  const finishCurrentActiveSession = () => updateActiveSessionState((session) => completeActiveSession(session));
+
+  const resetActiveSessionTimer = () => {
+    if (activeSession && activeSession.status !== 'completed' && !window.confirm('Interrompere la sessione attiva?')) {
+      return;
+    }
+    setActiveSession(undefined);
+    setIsActiveSessionDrawerOpen(false);
+  };
+
+  const requestActiveSessionNotifications = () => {
+    requestBrowserNotificationPermission().then((permission) => {
+      setNotificationPermission(permission);
+      setActiveSession((current) => (current ? markActiveSessionNotificationAsked(current) : current));
+    });
+  };
+
+  const toggleActiveSessionSound = () => {
+    updateActiveSessionState((session) => setActiveSessionSoundEnabled(session, !session.soundEnabled));
   };
 
   const clearLocalMemory = () => {
@@ -722,7 +948,7 @@ function App() {
     nextTimer?: TimerState,
     nextPlanning: TimelinePlanningState = planning,
     forceCustomTimeline = false,
-  ) => {
+  ): JournalEntry => {
     const now = Date.now();
     const timelineSnapshot = createTimelineSnapshotFromCurrentTimeline(timelineName, '');
     const existingEntry = currentJournalEntryId
@@ -752,6 +978,7 @@ function App() {
     setCurrentJournalEntryId(updatedEntry.id);
     setActivePlannerSection('diary');
     setActiveView('planner');
+    return updatedEntry;
   };
 
   const saveJournalRecipeToArchive = (entryId: string) => {
@@ -875,6 +1102,89 @@ function App() {
       ...snapshots,
       sessionData,
     };
+  };
+
+  const saveActiveSessionToJournal = () => {
+    if (!activeSession) {
+      return;
+    }
+
+    const completedSession = activeSession.status === 'completed'
+      ? activeSession
+      : completeActiveSession(activeSession);
+    const now = Date.now();
+    const startDate = new Date(getSessionStartDate(completedSession));
+    const endDate = new Date(getSessionEndDate(completedSession));
+    const completedSteps = completedSession.stepSchedule.filter((step) => step.completedAt).length;
+    const skippedSteps = completedSession.stepSchedule.filter((step) => step.skippedAt).length;
+    const pauseMinutes = getSessionPauseMinutes(completedSession);
+    const durationMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime() - completedSession.accumulatedPauseMs) / 60000));
+    const autoSummary = [
+      `Sessione: ${completedSession.recipeSnapshot.name || completedSession.recipeSnapshot.customProfileName || 'Impasto'}`,
+      `Timeline: ${completedSession.timelineSnapshot.name || 'Piano di lavorazione'}`,
+      `Inizio: ${startDate.toLocaleString('it-IT')}`,
+      `Fine: ${endDate.toLocaleString('it-IT')}`,
+      `Step completati: ${completedSteps}`,
+      `Step saltati: ${skippedSteps}`,
+      `Pause: ${pauseMinutes} min`,
+      `Durata reale: ${durationMinutes} min`,
+    ].join('\n');
+    const finalNotes = autoSummary;
+    const existingEntry = completedSession.journalEntryId
+      ? archive.journal.find((entry) => entry.id === completedSession.journalEntryId)
+      : undefined;
+    const entry: JournalEntry = existingEntry
+      ? {
+          ...existingEntry,
+          updatedAt: now,
+          recipeSnapshot: cloneValue(completedSession.recipeSnapshot),
+          timelineSnapshot: cloneValue(completedSession.timelineSnapshot),
+          timerState: activeSessionToTimerState(completedSession),
+          sessionData: {
+            ...existingEntry.sessionData,
+            ambientTemperature: completedSession.recipeSnapshot.ambientTemperature,
+            status: 'completed',
+            startTime: startDate.toTimeString().slice(0, 5),
+            endTime: endDate.toTimeString().slice(0, 5),
+            finalNotes,
+            resultLabel: existingEntry.sessionData.resultLabel,
+            nextAdjustment: existingEntry.sessionData.nextAdjustment,
+          },
+        }
+      : {
+          id: createArchiveId('journal'),
+          schemaVersion: 1,
+          createdAt: now,
+          updatedAt: now,
+          title: completedSession.recipeSnapshot.name || getFallbackJournalTitle(completedSession.recipeSnapshot, completedSession.createdAt),
+          date: toDateInputValue(endDate),
+          recipeSnapshot: cloneValue(completedSession.recipeSnapshot),
+          timelineSnapshot: cloneValue(completedSession.timelineSnapshot),
+          timerState: activeSessionToTimerState(completedSession),
+          sessionData: {
+            ambientTemperature: completedSession.recipeSnapshot.ambientTemperature,
+            status: 'completed',
+            startTime: startDate.toTimeString().slice(0, 5),
+            endTime: endDate.toTimeString().slice(0, 5),
+            initialNotes: '',
+            finalNotes,
+            resultLabel: '',
+            nextAdjustment: '',
+          },
+        };
+
+    setArchive((current) => (
+      current.journal.some((journalEntry) => journalEntry.id === entry.id)
+        ? updateJournalEntry(current, entry)
+        : addJournalEntry(current, entry)
+    ));
+    setCurrentJournalEntryId(entry.id);
+    setActiveSession(undefined);
+    setIsActiveSessionDrawerOpen(false);
+    setArchiveMessage(`Sessione salvata nel Diario: ${entry.title}.`);
+    setActiveArchiveTab('journal');
+    setActivePlannerSection('diary');
+    setActiveView('planner');
   };
 
   const saveRecipeToArchive = (name: string, notes: string, associatedTimelineId?: string) => {
@@ -1240,11 +1550,37 @@ function App() {
         timelinesCount={archive.timelines.length}
         newRecipeBadge={newRecipeBadge}
         newTimelineBadge={newTimelineBadge}
+        activeSession={activeSession}
         onOpenPlanner={openPlanner}
         onOpenRecipes={() => openArchiveTab('recipes')}
         onOpenTimelines={() => openArchiveTab('timelines')}
+        onOpenActiveSession={() => setIsActiveSessionDrawerOpen(true)}
         onReset={reset}
       />
+
+      {activeSession && (
+        <ActiveSessionBar
+          session={activeSession}
+          isDrawerOpen={isActiveSessionDrawerOpen}
+          notificationPermission={notificationPermission}
+          onOpenDrawer={() => setIsActiveSessionDrawerOpen(true)}
+          onCloseDrawer={() => setIsActiveSessionDrawerOpen(false)}
+          onStartScheduled={startScheduledCurrentSession}
+          onPause={pauseCurrentActiveSession}
+          onResume={resumeCurrentActiveSession}
+          onCompleteStep={completeCurrentActiveSessionStep}
+          onSkipStep={skipCurrentActiveSessionStep}
+          onFinish={finishCurrentActiveSession}
+          onSaveJournal={saveActiveSessionToJournal}
+          onOpenDiary={() => {
+            setActivePlannerSection('diary');
+            setActiveView('planner');
+            setIsActiveSessionDrawerOpen(false);
+          }}
+          onRequestNotifications={requestActiveSessionNotifications}
+          onToggleSound={toggleActiveSessionSound}
+        />
+      )}
 
       <div className="mx-auto flex w-full max-w-[1510px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <section className="rounded-[24px] border border-[#322e2b18] bg-[#fffdf8]/92 shadow-air backdrop-blur">
@@ -1325,7 +1661,7 @@ function App() {
             timelineName={timelineName}
             isTimelineCustom={timelineIsCustom}
             steps={timelineSteps}
-            timer={timer}
+            timer={timelineTimer}
             planning={planning}
             timerRestoreNotice={timerRestoreNotice}
             onPresetApplied={applyTimelinePresetState}
@@ -1336,18 +1672,22 @@ function App() {
             onAmbientTemperatureChange={updateAmbientTemperature}
             onOpenTimelines={() => openArchiveTab('timelines')}
             onSaveTimeline={() => openArchiveTab('timelines')}
-            onStartTimelineNow={(nextTimer) => updateCurrentJournalEntryFromTimeline('active', nextTimer)}
-            onProgramTimeline={(nextPlanning) => {
+            onStartTimelineNow={startActiveSessionNow}
+            onProgramTimeline={(nextPlanning, scheduledStartAt) => {
               updateTimelinePlanningAsCustom(nextPlanning);
-              updateCurrentJournalEntryFromTimeline('scheduled', undefined, nextPlanning, true);
+              programActiveSession(nextPlanning, scheduledStartAt);
             }}
+            onPauseTimer={pauseCurrentActiveSession}
+            onResumeTimer={resumeCurrentActiveSession}
+            onSkipCurrentStep={skipCurrentActiveSessionStep}
+            onResetTimer={resetActiveSessionTimer}
           />
             ) : (
           <DiaryPanel
             archive={archive}
             archiveMessage={archiveMessage}
             currentJournalEntryId={currentJournalEntryId}
-            timer={timer}
+            timer={timelineTimer}
             onUpdateJournalEntry={updateJournalInArchive}
             onDeleteJournalEntry={deleteJournalFromArchive}
             onLoadJournalSnapshot={loadJournalSnapshotIntoPlanner}
@@ -2207,9 +2547,11 @@ function Header({
   timelinesCount,
   newRecipeBadge,
   newTimelineBadge,
+  activeSession,
   onOpenPlanner,
   onOpenRecipes,
   onOpenTimelines,
+  onOpenActiveSession,
   onReset,
 }: {
   activeView: AppView;
@@ -2217,9 +2559,11 @@ function Header({
   timelinesCount: number;
   newRecipeBadge: boolean;
   newTimelineBadge: boolean;
+  activeSession?: ActiveSession;
   onOpenPlanner: () => void;
   onOpenRecipes: () => void;
   onOpenTimelines: () => void;
+  onOpenActiveSession: () => void;
   onReset: () => void;
 }) {
   return (
@@ -2256,6 +2600,15 @@ function Header({
             hasNewBadge={newTimelineBadge}
             onClick={onOpenTimelines}
           />
+          {activeSession && (
+            <HeaderAction
+              icon={<Clock3 size={18} />}
+              label="Timer"
+              hasContent
+              hasNewBadge={activeSession.status === 'running' || activeSession.status === 'completed'}
+              onClick={onOpenActiveSession}
+            />
+          )}
           <HeaderAction icon={<CircleHelp size={20} />} label="Guida" disabled />
           <HeaderAction icon={<RotateCcw size={20} />} label="Ripristina" onClick={onReset} />
         </nav>

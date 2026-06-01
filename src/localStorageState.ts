@@ -1,6 +1,8 @@
 import type { AmbientTemperatureId } from './ambientTemperature';
 import type { CurrentJournalDraft, RecipeSnapshot, TimelineSnapshot } from './archiveTypes';
 import type { BreadInputs } from './calculations';
+import type { ActiveSession, ActiveSessionStep } from './domain/session/activeSessionTypes';
+import { normalizeActiveSession } from './domain/session/activeSessionUtils';
 import type { GramValues, UnitModes } from './defaults';
 import type { FlourMix } from './flours';
 import {
@@ -43,6 +45,7 @@ export type PersistedBreadPlannerState = {
   };
   currentJournalEntryId?: string;
   currentJournalDraft?: CurrentJournalDraft;
+  activeSession?: ActiveSession;
 };
 
 export type LoadedBreadPlannerState = {
@@ -54,6 +57,7 @@ const temperatureIds = ['cold', 'normal', 'warm'] as const;
 const timerStatuses: TimerStatus[] = ['idle', 'running', 'paused', 'finished'];
 const planningModes: TimelinePlanningMode[] = ['now', 'backward'];
 const journalStatuses = ['draft', 'active', 'scheduled', 'completed'] as const;
+const activeSessionStatuses = ['scheduled', 'running', 'paused', 'completed'] as const;
 const timelineStepTypes = Object.keys(timelineStepDefinitions) as TimelineStepType[];
 const timelineStepCategories = ['rest', 'fold', 'fermentation', 'shaping', 'cold', 'bake', 'custom'] as TimelineStepCategory[];
 
@@ -174,6 +178,37 @@ const isCurrentJournalDraft = (value: unknown): value is CurrentJournalDraft =>
   (value.timerState === undefined || isTimerState(value.timerState)) &&
   (value.planning === undefined || isTimelinePlanningState(value.planning));
 
+const isActiveSessionStep = (value: unknown): value is ActiveSessionStep =>
+  isObject(value) &&
+  isString(value.stepId) &&
+  isString(value.label) &&
+  isFiniteNumber(value.startsAt) &&
+  isFiniteNumber(value.endsAt) &&
+  isFiniteNumber(value.durationMinutes) &&
+  value.durationMinutes >= 0 &&
+  (value.completedAt === undefined || isFiniteNumber(value.completedAt)) &&
+  (value.skippedAt === undefined || isFiniteNumber(value.skippedAt));
+
+const isActiveSession = (value: unknown): value is ActiveSession =>
+  isObject(value) &&
+  isString(value.id) &&
+  activeSessionStatuses.includes(value.status as (typeof activeSessionStatuses)[number]) &&
+  isRecipeSnapshot(value.recipeSnapshot) &&
+  isTimelineSnapshot(value.timelineSnapshot) &&
+  (value.journalEntryId === undefined || isString(value.journalEntryId)) &&
+  isFiniteNumber(value.createdAt) &&
+  (value.scheduledStartAt === undefined || isFiniteNumber(value.scheduledStartAt)) &&
+  (value.startedAt === undefined || isFiniteNumber(value.startedAt)) &&
+  (value.pausedAt === undefined || isFiniteNumber(value.pausedAt)) &&
+  (value.completedAt === undefined || isFiniteNumber(value.completedAt)) &&
+  isFiniteNumber(value.accumulatedPauseMs) &&
+  value.accumulatedPauseMs >= 0 &&
+  (value.currentStepId === undefined || isString(value.currentStepId)) &&
+  Array.isArray(value.stepSchedule) &&
+  value.stepSchedule.every(isActiveSessionStep) &&
+  (value.notificationPermissionAsked === undefined || isBoolean(value.notificationPermissionAsked)) &&
+  (value.soundEnabled === undefined || isBoolean(value.soundEnabled));
+
 const normalizeTimelinePlanning = (value: unknown): TimelinePlanningState =>
   isTimelinePlanningState(value) ? value : initialTimelinePlanning;
 
@@ -236,6 +271,7 @@ export const loadPersistedState = (): LoadedBreadPlannerState | null => {
           timer: finishTimerIfElapsed(parsed.timeline.timer, parsed.timeline.steps),
           planning: normalizeTimelinePlanning(parsed.timeline.planning),
         },
+        activeSession: isActiveSession(parsed.activeSession) ? normalizeActiveSession(parsed.activeSession) : undefined,
       },
     };
   } catch {

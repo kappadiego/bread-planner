@@ -54,3 +54,13 @@ The preparatory `ActiveBreadSession` type describes that future boundary without
 - Keep diary data snapshot-based.
 - Avoid UI, layout, and microcopy changes in internal architecture releases.
 - Prefer small, buildable refactors over large moves that make behavior hard to compare.
+
+## Visual Palette
+
+Use only the Bread Planner palette for UI accents and surfaces unless the palette is explicitly changed:
+
+- Cream: `#f9e8d3`
+- Sage: `#8ea06d`
+- Crust: `#b26837`
+- Wheat: `#e0ae63`
+- Ink: `#322e2b`

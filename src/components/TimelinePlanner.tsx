@@ -60,7 +60,11 @@ type TimelinePlannerProps = {
   onOpenTimelines?: () => void;
   onSaveTimeline?: () => void;
   onStartTimelineNow?: (timer: TimerState) => void;
-  onProgramTimeline?: (planning: TimelinePlanningState) => void;
+  onProgramTimeline?: (planning: TimelinePlanningState, scheduledStartAt?: number) => void;
+  onPauseTimer?: () => void;
+  onResumeTimer?: () => void;
+  onSkipCurrentStep?: () => void;
+  onResetTimer?: () => void;
 };
 
 const formatDigitalDuration = (ms: number) => {
@@ -154,6 +158,10 @@ export function TimelinePlanner({
   onSaveTimeline,
   onStartTimelineNow,
   onProgramTimeline,
+  onPauseTimer,
+  onResumeTimer,
+  onSkipCurrentStep,
+  onResetTimer,
 }: TimelinePlannerProps) {
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
   const [appliedSuggestionPresetId, setAppliedSuggestionPresetId] = useState<string | null>(null);
@@ -275,14 +283,27 @@ export function TimelinePlanner({
     }
   }, [onTimerChange, timer, totalDurationMs]);
 
-  const resetTimer = () => onTimerChange(initialTimer);
+  const resetTimer = () => {
+    onResetTimer?.();
+    onTimerChange(initialTimer);
+  };
   const openProgram = () => {
     setIsProgramOpen(true);
     const nextPlanning: TimelinePlanningState = planning.mode !== 'backward' ? { ...planning, mode: 'backward' } : planning;
     if (planning.mode !== 'backward') {
       onPlanningChange(nextPlanning);
     }
-    onProgramTimeline?.(nextPlanning);
+  };
+
+  const programTimeline = () => {
+    if (planning.mode !== 'backward') {
+      const nextPlanning: TimelinePlanningState = { ...planning, mode: 'backward' };
+      onPlanningChange(nextPlanning);
+      onProgramTimeline?.(nextPlanning, backwardPlan.startAt?.getTime());
+      return;
+    }
+
+    onProgramTimeline?.(planning, backwardPlan.startAt?.getTime());
   };
 
   const buildPresetSteps = (presetId: string) => {
@@ -423,6 +444,7 @@ export function TimelinePlanner({
 
   const pause = () => {
     if (timer.status === 'running') {
+      onPauseTimer?.();
       onTimerChange({ ...timer, status: 'paused', pausedAt: Date.now() });
     }
   };
@@ -432,6 +454,7 @@ export function TimelinePlanner({
       return;
     }
 
+    onResumeTimer?.();
     onTimerChange({
       ...timer,
       status: 'running',
@@ -445,6 +468,7 @@ export function TimelinePlanner({
       return;
     }
 
+    onSkipCurrentStep?.();
     const targetElapsed = Math.min(currentStepInfo.stepEndMs, totalDurationMs);
     const baseNow = timer.status === 'paused' && timer.pausedAt !== null ? timer.pausedAt : Date.now();
 
@@ -855,6 +879,8 @@ export function TimelinePlanner({
             <TimelinePlanningCard
               planning={planning}
               onChange={onPlanningChange}
+              onProgram={programTimeline}
+              canProgram={Boolean(backwardPlan.startAt && steps.length > 0 && totalDurationMs > 0)}
             />
           )}
 
@@ -886,9 +912,13 @@ function Metric({ label, value }: { label: string; value: string }) {
 function TimelinePlanningCard({
   planning,
   onChange,
+  onProgram,
+  canProgram,
 }: {
   planning: TimelinePlanningState;
   onChange: (planning: TimelinePlanningState) => void;
+  onProgram: () => void;
+  canProgram: boolean;
 }) {
   const updatePlanningField = (field: keyof Pick<TimelinePlanningState, 'targetEndDate' | 'targetEndTime'>, value: string) => {
     onChange({ ...planning, [field]: value });
@@ -916,6 +946,14 @@ function TimelinePlanningCard({
           />
         </label>
       </div>
+      <button
+        type="button"
+        onClick={onProgram}
+        disabled={!canProgram}
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-full border border-crust bg-crust px-4 text-sm font-semibold text-white transition hover:border-[#925028] hover:bg-[#925028] disabled:cursor-not-allowed disabled:opacity-45"
+      >
+        Programma piano
+      </button>
     </section>
   );
 }
