@@ -215,8 +215,8 @@ export function ArchivePanel({
     },
     journal: {
       title: 'Diario',
-      subtitle: 'Le tue prove reali: ricetta, timeline, condizioni, note e risultato.',
-      warning: 'Il Diario salva snapshot delle prove: modificare una ricetta o una timeline dopo una prova non cambia il racconto già registrato.',
+      subtitle: 'Le tue entry reali: ricetta, timeline, condizioni, note e risultato.',
+      warning: 'Il Diario salva snapshot delle entry: modificare una ricetta o una timeline dopo non cambia il racconto già registrato.',
     },
   }[activeTab];
 
@@ -270,7 +270,7 @@ export function ArchivePanel({
                 <CardActions>
                   <MiniButton onClick={() => onLoadRecipe(recipe.id)}>Carica nel planner</MiniButton>
                   <MiniButton onClick={() => onDuplicateRecipe(recipe.id)} icon={Copy}>Duplica</MiniButton>
-                  <MiniButton onClick={() => onCreateJournalFromRecipe(recipe.id)} icon={History}>Crea prova</MiniButton>
+                  <MiniButton onClick={() => onCreateJournalFromRecipe(recipe.id)} icon={History}>Crea entry</MiniButton>
                   <MiniButton onClick={() => onDeleteRecipe(recipe.id)} icon={Trash2}>Elimina</MiniButton>
                 </CardActions>
               </ArchiveCard>
@@ -299,7 +299,7 @@ export function ArchivePanel({
               {activeTimelineId && timelineRecipeId && (
                 <ActionButton onClick={() => onAssociateTimelineToRecipe(activeTimelineId, timelineRecipeId)} icon={FilePlus2}>Associa a ricetta</ActionButton>
               )}
-              <ActionButton onClick={() => onCreateJournalFromTimeline(activeTimelineId ?? '', timelineRecipeId || undefined)} icon={Play}>Crea prova</ActionButton>
+              <ActionButton onClick={() => onCreateJournalFromTimeline(activeTimelineId ?? '', timelineRecipeId || undefined)} icon={Play}>Crea entry</ActionButton>
             </div>
           </ArchiveForm>
 
@@ -314,7 +314,7 @@ export function ArchivePanel({
                 <CardActions>
                   <MiniButton onClick={() => onLoadTimeline(timeline.id)}>Usa nel piano</MiniButton>
                   <MiniButton onClick={() => onDuplicateTimeline(timeline.id)} icon={Copy}>Duplica</MiniButton>
-                  <MiniButton onClick={() => onCreateJournalFromTimeline(timeline.id)} icon={History}>Crea prova</MiniButton>
+                  <MiniButton onClick={() => onCreateJournalFromTimeline(timeline.id)} icon={History}>Crea entry</MiniButton>
                   <MiniButton onClick={() => onDeleteTimeline(timeline.id)} icon={Trash2}>Elimina</MiniButton>
                 </CardActions>
               </ArchiveCard>
@@ -325,8 +325,8 @@ export function ArchivePanel({
 
       {activeTab === 'journal' && (
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(300px,0.65fr)_minmax(0,1fr)]">
-          <ArchiveForm title={editingJournalId ? 'Modifica prova' : 'Registra prova'}>
-            <TextInput label="Titolo prova" value={journalForm.title} onChange={(value) => setJournalForm((current) => ({ ...current, title: value }))} placeholder="Focaccia alta idratazione" />
+          <ArchiveForm title={editingJournalId ? 'Modifica entry' : 'Registra entry'}>
+            <TextInput label="Titolo entry" value={journalForm.title} onChange={(value) => setJournalForm((current) => ({ ...current, title: value }))} placeholder="Focaccia alta idratazione" />
             <TextInput label="Data" type="date" value={journalForm.date} onChange={(value) => setJournalForm((current) => ({ ...current, date: value }))} />
             <SelectInput
               label="Stato"
@@ -343,26 +343,26 @@ export function ArchivePanel({
               label="Ricetta sorgente"
               value={journalForm.sourceRecipeId}
               onChange={(value) => setJournalForm((current) => ({ ...current, sourceRecipeId: value }))}
-              options={[{ value: '', label: 'Planner corrente' }, ...archive.recipes.map((recipe) => ({ value: recipe.id, label: recipe.name }))]}
+              options={[{ value: '', label: 'Impasto corrente' }, ...archive.recipes.map((recipe) => ({ value: recipe.id, label: recipe.name }))]}
             />
             <SelectInput
               label="Timeline sorgente"
               value={journalForm.sourceTimelineId}
               onChange={(value) => setJournalForm((current) => ({ ...current, sourceTimelineId: value }))}
-              options={[{ value: '', label: 'Timeline corrente' }, ...archive.timelines.map((timeline) => ({ value: timeline.id, label: timeline.name }))]}
+              options={[{ value: '', label: 'Tempi dell’impasto' }, ...archive.timelines.map((timeline) => ({ value: timeline.id, label: timeline.name }))]}
             />
             <TextInput label="Risultato" value={journalForm.resultLabel} onChange={(value) => setJournalForm((current) => ({ ...current, resultLabel: value }))} placeholder="Buona, da migliorare..." />
             <TextArea label="Note" value={journalForm.finalNotes} onChange={(value) => setJournalForm((current) => ({ ...current, finalNotes: value }))} />
             <TextArea label="Cosa cambiare la prossima volta" value={journalForm.nextAdjustment} onChange={(value) => setJournalForm((current) => ({ ...current, nextAdjustment: value }))} />
             <div className="grid gap-2 sm:grid-cols-2">
-              <ActionButton onClick={submitJournal} icon={History}>{editingJournalId ? 'Aggiorna prova' : 'Salva nel Diario'}</ActionButton>
+              <ActionButton onClick={submitJournal} icon={History}>{editingJournalId ? 'Aggiorna entry' : 'Salva nel Diario'}</ActionButton>
               {editingJournalId && <ActionButton onClick={() => { setEditingJournalId(null); setJournalForm(emptyJournalForm()); }} icon={RotateIcon}>Annulla</ActionButton>}
             </div>
           </ArchiveForm>
 
           <div className="grid gap-3">
             {archive.journal.length === 0 ? (
-              <EmptyState text="Non hai ancora registrato prove. Quando prepari un impasto, salva una prova con ricetta, timeline, temperatura, note e risultato." />
+              <EmptyState text="Non hai ancora registrato entry. Quando prepari un impasto, salva una entry con ricetta, timeline, temperatura, note e risultato." />
             ) : archive.journal.map((entry) => (
               <ArchiveCard key={entry.id} title={entry.title} icon={History}>
                 <p className="text-[#8d8176]">{formatDate(entry.date)}</p>
@@ -374,7 +374,7 @@ export function ArchivePanel({
                 </p>
                 <CardActions>
                   <MiniButton onClick={() => editJournal(entry.id)}>Apri</MiniButton>
-                  <MiniButton onClick={() => onCreateTrialFromJournal(entry.id)} icon={FilePlus2}>Crea nuova prova</MiniButton>
+                  <MiniButton onClick={() => onCreateTrialFromJournal(entry.id)} icon={FilePlus2}>Crea nuova entry</MiniButton>
                   <MiniButton onClick={() => onLoadJournalSnapshot(entry.id)} icon={FolderOpen}>Carica nel planner</MiniButton>
                   <MiniButton onClick={() => onDeleteJournalEntry(entry.id)} icon={Trash2}>Elimina</MiniButton>
                 </CardActions>

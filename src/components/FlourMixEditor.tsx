@@ -139,7 +139,7 @@ export function FlourMixEditor({
   };
 
   return (
-    <section className="border-t border-[#322e2b14] bg-[#fffdf8] p-4">
+    <section className="bg-[#fffdf8] p-4">
       <div className="mb-4 grid gap-3">
         <p className="text-sm leading-5 text-[#6f6257]">{flourPrompt}</p>
         <p className={`rounded-2xl px-3 py-2 text-sm font-semibold ${isMixValid ? 'bg-proof-50 text-proof-700 ring-1 ring-proof-100' : 'bg-wheat-50 text-ink ring-1 ring-wheat-200'}`}>

@@ -4,6 +4,11 @@ import type { BreadInputs } from './calculations';
 import type { GramValues, UnitModes } from './defaults';
 import type { FlourMix } from './flours';
 import {
+  readLocalStorageItem,
+  removeLocalStorageItem,
+  writeLocalStorageItem,
+} from './storage/localStorageAdapter';
+import {
   timelineStepDefinitions,
   type TimelineStep,
   type TimelineStepCategory,
@@ -29,6 +34,8 @@ export type PersistedBreadPlannerState = {
   flourMix: FlourMix;
   ambientTemperature: AmbientTemperatureId;
   timeline: {
+    name?: string;
+    isCustom?: boolean;
     selectedPresetId: string;
     steps: TimelineStep[];
     timer: TimerState;
@@ -49,14 +56,6 @@ const planningModes: TimelinePlanningMode[] = ['now', 'backward'];
 const journalStatuses = ['draft', 'active', 'scheduled', 'completed'] as const;
 const timelineStepTypes = Object.keys(timelineStepDefinitions) as TimelineStepType[];
 const timelineStepCategories = ['rest', 'fold', 'fermentation', 'shaping', 'cold', 'bake', 'custom'] as TimelineStepCategory[];
-
-const canUseLocalStorage = () => {
-  try {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-  } catch {
-    return false;
-  }
-};
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -158,6 +157,7 @@ const isTimelineSnapshot = (value: unknown): value is TimelineSnapshot =>
   isString(value.notes) &&
   (value.activeProfileId === undefined || isString(value.activeProfileId)) &&
   isString(value.selectedPresetId) &&
+  (value.ambientTemperature === undefined || isAmbientTemperature(value.ambientTemperature)) &&
   isFiniteNumber(value.totalDurationMinutes) &&
   Array.isArray(value.steps) &&
   value.steps.every(isTimelineStep);
@@ -206,6 +206,8 @@ const isPersistedState = (value: unknown): value is PersistedBreadPlannerState =
   isFlourMix(value.flourMix) &&
   isAmbientTemperature(value.ambientTemperature) &&
   isObject(value.timeline) &&
+  (value.timeline.name === undefined || isString(value.timeline.name)) &&
+  (value.timeline.isCustom === undefined || isBoolean(value.timeline.isCustom)) &&
   isString(value.timeline.selectedPresetId) &&
   Array.isArray(value.timeline.steps) &&
   value.timeline.steps.every(isTimelineStep) &&
@@ -215,12 +217,8 @@ const isPersistedState = (value: unknown): value is PersistedBreadPlannerState =
   (value.currentJournalDraft === undefined || isCurrentJournalDraft(value.currentJournalDraft));
 
 export const loadPersistedState = (): LoadedBreadPlannerState | null => {
-  if (!canUseLocalStorage()) {
-    return null;
-  }
-
   try {
-    const rawValue = window.localStorage.getItem(BREAD_PLANNER_STORAGE_KEY);
+    const rawValue = readLocalStorageItem(BREAD_PLANNER_STORAGE_KEY);
     if (!rawValue) {
       return null;
     }
@@ -246,25 +244,9 @@ export const loadPersistedState = (): LoadedBreadPlannerState | null => {
 };
 
 export const savePersistedState = (state: PersistedBreadPlannerState) => {
-  if (!canUseLocalStorage()) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(BREAD_PLANNER_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage can fail in private mode or when storage quota is full.
-  }
+  writeLocalStorageItem(BREAD_PLANNER_STORAGE_KEY, JSON.stringify(state));
 };
 
 export const clearPersistedState = () => {
-  if (!canUseLocalStorage()) {
-    return;
-  }
-
-  try {
-    window.localStorage.removeItem(BREAD_PLANNER_STORAGE_KEY);
-  } catch {
-    // Ignore storage errors: clearing local memory should never break the app.
-  }
+  removeLocalStorageItem(BREAD_PLANNER_STORAGE_KEY);
 };

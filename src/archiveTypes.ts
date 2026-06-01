@@ -33,6 +33,7 @@ export type TimelineSnapshot = {
   notes: string;
   activeProfileId?: string;
   selectedPresetId: string;
+  ambientTemperature?: AmbientTemperatureId;
   totalDurationMinutes: number;
   steps: TimelineStep[];
 };

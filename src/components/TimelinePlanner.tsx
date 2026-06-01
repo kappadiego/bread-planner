@@ -45,12 +45,15 @@ type TimelinePlannerProps = {
   flourMix: FlourMix;
   ambientTemperature: AmbientTemperatureId;
   selectedPresetId: string;
+  timelineName: string;
+  isTimelineCustom: boolean;
   steps: TimelineStep[];
   timer: TimerState;
   planning: TimelinePlanningState;
   timerRestoreNotice: string | null;
-  onSelectedPresetIdChange: (presetId: string) => void;
+  onPresetApplied: (presetId: string, steps: TimelineStep[]) => void;
   onStepsChange: (steps: TimelineStep[]) => void;
+  onTimelineNameChange: (name: string) => void;
   onTimerChange: (timer: TimerState) => void;
   onPlanningChange: (planning: TimelinePlanningState) => void;
   onAmbientTemperatureChange: (value: AmbientTemperatureId) => void;
@@ -135,12 +138,15 @@ export function TimelinePlanner({
   flourMix,
   ambientTemperature,
   selectedPresetId,
+  timelineName,
+  isTimelineCustom,
   steps,
   timer,
   planning,
   timerRestoreNotice,
-  onSelectedPresetIdChange,
+  onPresetApplied,
   onStepsChange,
+  onTimelineNameChange,
   onTimerChange,
   onPlanningChange,
   onAmbientTemperatureChange,
@@ -298,21 +304,19 @@ export function TimelinePlanner({
   const applyPreset = (presetId: string) => {
     const preset = timelinePresets.find((item) => item.id === presetId) ?? timelinePresets[0];
     setAppliedSuggestionPresetId(null);
-    onSelectedPresetIdChange(preset.id);
-    onStepsChange(buildPresetSteps(preset.id));
+    onPresetApplied(preset.id, buildPresetSteps(preset.id));
     resetTimer();
   };
 
   const restoreSelectedPreset = () => {
     setAppliedSuggestionPresetId(null);
-    onStepsChange(buildPresetSteps(selectedPreset.id));
+    onPresetApplied(selectedPreset.id, buildPresetSteps(selectedPreset.id));
     resetTimer();
   };
 
   const applySuggestedTimeline = () => {
     setAppliedSuggestionPresetId(suggestedTimeline.recommendedPresetId);
-    onSelectedPresetIdChange(suggestedTimeline.recommendedPresetId);
-    onStepsChange(buildPresetSteps(suggestedTimeline.recommendedPresetId));
+    onPresetApplied(suggestedTimeline.recommendedPresetId, buildPresetSteps(suggestedTimeline.recommendedPresetId));
     resetTimer();
   };
 
@@ -455,7 +459,7 @@ export function TimelinePlanner({
   return (
     <section className="grid gap-5">
       <div className="mb-5">
-        <h2 className="font-display text-[24px] font-semibold text-ink">Scegli il piano di lavorazione</h2>
+        <h2 className="font-display text-[30px] font-semibold tracking-normal text-ink">Scegli il piano di lavorazione</h2>
       </div>
 
       <div className="grid gap-6">
@@ -483,24 +487,73 @@ export function TimelinePlanner({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {timelinePresets.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => applyPreset(preset.id)}
-                className={`min-h-[92px] rounded-2xl border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(178,104,55,0.18)] ${
-                  selectedPresetId === preset.id
-                    ? 'border-crust/65 bg-cream text-ink ring-2 ring-crust/15'
-                    : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/30'
-                }`}
-                aria-pressed={selectedPresetId === preset.id}
-              >
-                <span className="block text-sm font-semibold">{preset.label}</span>
-                <span className="mt-1 block text-xs leading-5 text-[#6f6257]">
-                  {getPresetShortDescription(preset.id, preset.description)}
-                </span>
-              </button>
-            ))}
+            {timelinePresets.map((preset) => {
+              const isSelected = selectedPresetId === preset.id;
+              if (preset.id === 'custom') {
+                return (
+                  <div
+                    key={preset.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => applyPreset(preset.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        applyPreset(preset.id);
+                      }
+                    }}
+                    className={`min-h-[92px] cursor-pointer rounded-2xl border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(178,104,55,0.18)] ${
+                      isSelected
+                        ? 'border-crust/65 bg-cream text-ink ring-2 ring-crust/15'
+                        : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/30'
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {isSelected ? (
+                      <input
+                        type="text"
+                        aria-label="Nome piano custom"
+                        value={timelineName}
+                        placeholder="Piano personalizzato"
+                        onClick={(event) => event.stopPropagation()}
+                        onFocus={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        onChange={(event) => onTimelineNameChange(event.currentTarget.value)}
+                        className="min-h-10 w-full min-w-0 rounded-xl border border-crust/25 bg-white px-3 text-sm font-semibold text-ink outline-none transition placeholder:text-[#9b9188] focus:border-crust focus:ring-4 focus:ring-[rgba(178,104,55,0.18)]"
+                      />
+                    ) : (
+                      <span className="block text-sm font-semibold">{isTimelineCustom ? timelineName : preset.label}</span>
+                    )}
+                    <span className="mt-1 block text-xs leading-5 text-[#6f6257]">
+                      {isSelected ? 'Rinomina il piano personalizzato.' : getPresetShortDescription(preset.id, preset.description)}
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyPreset(preset.id)}
+                  className={`min-h-[92px] rounded-2xl border px-3 py-3 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(178,104,55,0.18)] ${
+                    isSelected
+                      ? 'border-crust/65 bg-cream text-ink ring-2 ring-crust/15'
+                      : 'border-[#322e2b18] bg-white text-[#6f6257] hover:border-crust/35 hover:bg-cream/30'
+                  }`}
+                  aria-pressed={isSelected}
+                >
+                  <span className="block text-sm font-semibold">
+                    {isSelected && timelineName && timelineName !== preset.label ? timelineName : preset.label}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-[#6f6257]">
+                    {isSelected && timelineName && timelineName !== preset.label
+                      ? `Basata su ${preset.label}.`
+                      : getPresetShortDescription(preset.id, preset.description)}
+                  </span>
+                </button>
+              );
+            })}
             <button
               type="button"
               onClick={onOpenTimelines ?? onSaveTimeline}
@@ -515,8 +568,17 @@ export function TimelinePlanner({
               </span>
             </button>
           </div>
+        </div>
 
-          <section className="mt-3 rounded-2xl border border-wheat-200 bg-wheat-50/70 px-3 py-2">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4">
+          <AmbientTemperatureSelector
+            value={ambientTemperature}
+            onChange={onAmbientTemperatureChange}
+            description="La temperatura aiuta a interpretare i tempi della fermentazione."
+          />
+
+          <section className="mt-4 rounded-2xl border border-wheat-200 bg-wheat-50/70 px-3 py-3">
             {isSuggestionApplied ? (
               <p className="text-sm font-semibold leading-5 text-ink">
                 Proposta applicata: {recommendedPreset.label}. Puoi modificare gli step qui sotto.
@@ -548,18 +610,6 @@ export function TimelinePlanner({
               </>
             )}
           </section>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="rounded-[18px] border border-[#322e2b14] bg-[#fffdf8] p-4">
-          <AmbientTemperatureSelector
-            value={ambientTemperature}
-            onChange={onAmbientTemperatureChange}
-            description="La temperatura aiuta a interpretare i tempi della fermentazione."
-          />
-          <p className="mt-2 text-sm leading-5 text-[#6f6257]">
-            A temperature più alte l'impasto può maturare più velocemente.
-          </p>
 
           <div className="mt-5 space-y-3">
             {steps.length === 0 ? (

@@ -7,6 +7,8 @@ import type {
   SavedTimeline,
   TimelineSnapshot,
 } from './archiveTypes';
+import { cloneValue } from './domain/shared/cloneValue';
+import { readLocalStorageItem, writeLocalStorageItem } from './storage/localStorageAdapter';
 import type { TimelinePlanningState } from './timelinePlanning';
 import type { TimerState } from './timelineUtils';
 
@@ -18,14 +20,6 @@ export const createEmptyArchive = (): ArchiveState => ({
   timelines: [],
   journal: [],
 });
-
-const canUseLocalStorage = () => {
-  try {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-  } catch {
-    return false;
-  }
-};
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -61,6 +55,12 @@ const isTimelineSnapshot = (value: unknown): value is TimelineSnapshot =>
   isString(value.name) &&
   isString(value.notes) &&
   isString(value.selectedPresetId) &&
+  (
+    value.ambientTemperature === undefined ||
+    value.ambientTemperature === 'cold' ||
+    value.ambientTemperature === 'normal' ||
+    value.ambientTemperature === 'warm'
+  ) &&
   isNumber(value.totalDurationMinutes) &&
   Array.isArray(value.steps);
 
@@ -130,13 +130,6 @@ const isArchiveState = (value: unknown): value is ArchiveState =>
     Array.isArray(value.journal) &&
     value.journal.every(isJournalEntry);
 
-const cloneArchiveValue = <T,>(value: T): T => {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(value) as T;
-  }
-  return JSON.parse(JSON.stringify(value)) as T;
-};
-
 export const createArchiveId = (prefix: string) => {
   const randomPart = typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -145,12 +138,8 @@ export const createArchiveId = (prefix: string) => {
 };
 
 export const loadArchive = (): ArchiveState => {
-  if (!canUseLocalStorage()) {
-    return createEmptyArchive();
-  }
-
   try {
-    const rawValue = window.localStorage.getItem(BREAD_PLANNER_ARCHIVE_KEY);
+    const rawValue = readLocalStorageItem(BREAD_PLANNER_ARCHIVE_KEY);
     if (!rawValue) {
       return createEmptyArchive();
     }
@@ -163,15 +152,7 @@ export const loadArchive = (): ArchiveState => {
 };
 
 export const saveArchive = (archive: ArchiveState) => {
-  if (!canUseLocalStorage()) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(BREAD_PLANNER_ARCHIVE_KEY, JSON.stringify(archive));
-  } catch {
-    // Storage can fail in private mode or when quota is full; the app should keep working.
-  }
+  writeLocalStorageItem(BREAD_PLANNER_ARCHIVE_KEY, JSON.stringify(archive));
 };
 
 export const addRecipe = (archive: ArchiveState, recipe: SavedRecipe): ArchiveState => ({
@@ -256,6 +237,6 @@ export const createJournalSnapshot = (
   recipeSnapshot: RecipeSnapshot,
   timelineSnapshot?: TimelineSnapshot,
 ) => ({
-  recipeSnapshot: cloneArchiveValue(recipeSnapshot),
-  timelineSnapshot: timelineSnapshot ? cloneArchiveValue(timelineSnapshot) : undefined,
+  recipeSnapshot: cloneValue(recipeSnapshot),
+  timelineSnapshot: timelineSnapshot ? cloneValue(timelineSnapshot) : undefined,
 });
